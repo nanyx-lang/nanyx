@@ -732,8 +732,11 @@ let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
     Assert.True(isLinear atQuarter atN, $"{name}({n:N0}) took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {name}({n / 4:N0})")
 
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
-/// exported.
-let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
+/// exported, and what `define` defines in its linker besides WASI.
+let rec instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) = instantiateWatWith ignore wat dropped
+
+/// `instantiateWat`, with what `define` defines in the linker besides WASI: the imports of a debug build's probes, say.
+and instantiateWatWith (define: Wasmtime.Linker -> unit) (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     let dropName = Transpiler.Wasm.CoreIrDrop.dropName
     let exports =
         dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))") |> String.concat "\n"
@@ -745,6 +748,7 @@ let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     use module' = Wasmtime.Module.FromText(engine, "program", wat.Substring(0, wat.LastIndexOf ')') + exports + "\n)")
     use linker = new Wasmtime.Linker(engine)
     linker.DefineWasi()
+    define linker
     let instance = linker.Instantiate(store, module')
     match instance.GetAction CheckedExports.start with
     | null -> ()

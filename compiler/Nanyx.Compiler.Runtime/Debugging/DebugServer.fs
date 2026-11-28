@@ -95,6 +95,9 @@ module DebugServer =
         let frameLocals = Collections.Generic.Dictionary<int, (string * string) list * int>()
         let written = ResizeArray<string * string>()
         let mutable pending: (StopReason * Location) option = None
+        // Where a probe before a call that never returns asked for the locals, which are kept as its frame's without
+        // stopping, so that the crash that follows shows them.
+        let mutable crashingAt: Location option = None
         let mutable stopped: StoppedFrame list = []
         // What each variables reference stands for, while the program is stopped: a frame's locals, or a value's parts.
         let references = Collections.Generic.Dictionary<int, (string * ValueTree) list>()
@@ -167,6 +170,15 @@ module DebugServer =
                         frameLocals.Remove before |> ignore
                         locationOf probe |> Option.iter (fun at -> lock gate (fun () -> session <- DebugSession.passed at session))
                         false
+                    // Just before a call that never returns: the locals are always asked for, and kept as the frame's.
+                    // It runs once, on the way into a crash, so it costs nothing a run that doesn't crash pays.
+                    | Crashing ->
+                        match locationOf probe with
+                        | None -> false
+                        | Some at ->
+                            written.Clear()
+                            crashingAt <- Some at
+                            true
                     | Statement ->
                         match locationOf probe with
                         | None -> false
@@ -200,7 +212,12 @@ module DebugServer =
                             | AfterStep -> "step"
                             | Paused -> "pause"
                         stopHere reason None (Some at)
-                    | None -> ()
+                    | None ->
+                        match crashingAt with
+                        | Some at ->
+                            crashingAt <- None
+                            frameLocals.[at.Depth] <- (List.ofSeq written, at.Line)
+                        | None -> ()
                 member _.Crashed message = stopHere "exception" (Some message) None }
 
         // The program, once the client has set its breakpoints, on a thread of its own, which ends the session.

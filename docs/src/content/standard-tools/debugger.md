@@ -75,10 +75,12 @@ If the program never stopped in that frame, it says its locals weren't recorded:
 A crash, an `assert` that fails, or an error the compiler deferred to run time stops the program where it crashed,
 before it ends, with the crash's message. The stack shows the frame that crashed, and the frames that called it. A
 function whose last call never returns, such as a call of `crash`, keeps its frame for it, which a tail call wouldn't.
-The frame's locals are those of the last time the program stopped in it, as for a frame further out
-([#3257](https://github.com/nanyx-lang/nanyx/issues/3257)). Continuing ends
-the program, as `nanyx run` ends it: the crash's stack goes to the Debug Console, or to the terminal the program runs
-in, and the program's exit code is 1.
+The frame that called a function that never returns, such as `crash`, shows its locals as they were at that call, as
+**Locals at line N**, though the program never stopped there: all those in scope, but for a list, record or other value
+on the heap that the code had already handed on, or taken apart, on the way to the call, which it may have reused. A
+crash of another kind, such as an index out of range, shows a frame's locals from the last time the program stopped
+in it, as for a frame further out. Continuing ends the program, as `nanyx run` ends it: the crash's stack goes to the
+Debug Console, or to the terminal the program runs in, and the program's exit code is 1.
 
 How the runtime keeps the stack, answers the probes and stops is described in
 [Debug probes](../deep-dives/debug-probes#the-debugger).
