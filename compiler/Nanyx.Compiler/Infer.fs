@@ -238,7 +238,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     // so it fits any type without fixing a type variable, and nothing that uses it is another error.
     | IdentifierExpr name when name = Parser.Program.ImplicitNames.notImplemented ->
         let error = Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet"
-        Ok (mkTypedExpr expr Unifier.bottomType None None None, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
+        let ty, state = freshVar state
+        Ok (mkTypedExpr expr ty None None None, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
