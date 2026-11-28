@@ -224,6 +224,18 @@ module SpanTable =
     /// Whether `file`, as a frame names it, is a file of the standard library's.
     let isLibrary (table: SpanTable) (file: string) = table.Library.Contains file
 
+    /// The lines of each file, as the frames name it, that a statement probe is on, by its innermost place: the lines a
+    /// debugger can stop at.
+    let statementLines (table: SpanTable) : Map<string, Set<int>> =
+        table.Probes.Values
+        |> Seq.choose (fun probe ->
+            match probe.Kind, probe.Place with
+            | Statement, (_, file, line, _) :: _ -> Some(file, line)
+            | _ -> None)
+        |> Seq.groupBy fst
+        |> Seq.map (fun (file, lines) -> file, lines |> Seq.map snd |> Set.ofSeq)
+        |> Map.ofSeq
+
     /// The probe of the number `id`, if the module has one.
     let probe (table: SpanTable) (id: int) =
         match table.Probes.TryGetValue id with

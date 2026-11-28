@@ -35,12 +35,14 @@ let importDeclaration (declared: Extern) =
 
 /// What a debug build's probes import from the runtime, the module `nanyx:debug` (see `CoreIrProbes`): whether it is
 /// probing, read into a global when the program starts; the probe, which takes a probe's number and gives whether to
-/// write its locals; and the writing of a local, its name and its text.
+/// write its locals; the writing of a local, its name and its text; and that the locals asked for are all written, so
+/// that a debugger can stop there with them, before the statement runs.
 let probeModule = "nanyx:debug"
 let probingEnabled = "__nanyx_probing_enabled"
 let probing = "__nanyx_probing"
 let probeCall = "__nanyx_probe"
 let probeLocal = "__nanyx_probe_local"
+let probeWritten = "__nanyx_probe_written"
 /// `dbg`, which a module the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
 let dbgImport = "__nanyx_dbg"
 /// `value`, which a module built with `--show-values` gives each value it shows to, from `nanyx:debug`, as it gives a

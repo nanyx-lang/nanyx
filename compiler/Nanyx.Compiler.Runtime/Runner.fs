@@ -50,6 +50,10 @@ type ProgramIo =
     /// what it writes to stderr goes to `error`, each in the order it was written. The program's environment variables
     /// are `variables`, each a name and its value. Tests use this to run a program in their own process.
     | Redirected of input: string * output: IO.Stream * error: IO.Stream * variables: (string * string) list
+    /// Stdin is the file `input`, and what the program writes to stdout and stderr goes to the files `output` and
+    /// `error` as it writes it, for a caller to read while it runs, as the debugger does. The environment is
+    /// `variables`.
+    | ToFiles of input: string * output: string * error: string * variables: (string * string) list
 
 /// What a program compiled with memory checks left once it stopped: the values of the exported globals asked for, in
 /// order (0 for one the module does not export), and how big its memory had grown, in bytes (0 with none).
@@ -109,6 +113,14 @@ module WasmRunner =
                 for file, stream in [ outputFile, output; errorFile, error ] do
                     stream.Write(IO.File.ReadAllBytes file)
                     IO.File.Delete file
+        | ToFiles(input, output, error, variables) ->
+            store.SetWasiConfiguration(
+                wasi
+                    .WithStandardInput(input)
+                    .WithStandardOutput(output)
+                    .WithStandardError(error)
+                    .WithEnvironmentVariables(variables |> List.map (fun (name, value) -> struct (name, value))))
+            ignore
 
     /// Whether `ex` is the program ending itself through WASI `proc_exit` with exit code 0.
     let internal exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
@@ -266,7 +278,7 @@ module WasmRunner =
             Probing.define linker (spanTable program) listener
             Probing.defineDbg linker dbg
             let reported = ref None
-            CrashImport.define linker reported (ref false)
+            CrashImport.defineWith linker reported (ref false) (fun message -> listener |> Option.iter (fun listener -> listener.Crashed message))
             configure store
             let mutable instantiated = None
             let outcome =

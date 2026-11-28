@@ -1385,7 +1385,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             if not input.Probes then make parameters result body
             else
                 let newResult (ty: IrType) = newVar (uniqueName "__result") Local ty
-                make parameters result (CoreIrProbes.around newResult name (Place.ofSpan expr.Span) (probeLocals parameters) body)
+                make parameters result (CoreIrProbes.around newResult (CoreIrProbes.endsTheProgram input.DefinitionTypes) name (Place.ofSpan expr.Span) (probeLocals parameters) body)
         match lowering with
         | AsDefined ->
             let defTy =

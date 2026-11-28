@@ -6,8 +6,8 @@ order: 16
 
 A program built with debug probes calls the runtime at the start of each function, at each statement and at each
 place a function ends, and the runtime keeps a shadow stack from them and can ask for the locals of the frame it is in.
-They are the foundation of the debugger, which is planned on [Debugging](../work-in-progress/debugging). Only code that
-listens to them asks for them (`WasmOptions.Probes`): the debugger will, when it attaches to a run, and the tests do.
+They are the foundation of the [debugger](../standard-tools/debugger), `nanyx run --debug`. Only code that listens to
+them asks for them (`WasmOptions.Probes`): the debugger does, and the tests do.
 Nothing else listens, so no command builds with them: `nanyx run` and `nanyx test` compile without them, as a release
 build does, and so do `nanyx build` and `nanyx wasm`, whose module another WebAssembly runtime, without the imports
 below, may run. The probes made most of a program's code: `examples/shop.nyx`, compiled as `nanyx run` compiles it, is
@@ -24,7 +24,9 @@ code a program generates, shows fewer than all of them; writing them all made a 
 of 8,000 ran the compiler out of memory ([#2488](https://github.com/nanyx-lang/nanyx/issues/2488)). It wraps each function the source writes, a lifted lambda among them, in
 `CoreIrProbes.around`: an entry probe, which names the function and writes its parameters, and a return probe at each
 place it ends. A function that ends in a call ends before the call, so that a tail call stays one, and the callee's
-entry follows; one that ends in another value ends once it has it, in a local. A local is written only if a `dbg`
+entry follows, but for a call that never returns, one of a function whose result is `undefined`, as `crash`'s is
+(`CoreIrProbes.endsTheProgram`), which keeps the frame, so that the debugger shows the frame that crashed; one that ends
+in another value ends once it has it, in a local. A local is written only if a `dbg`
 printer can write its type (`CoreIrLowerDbg.printable`), and not a cell's, whose local holds its box.
 
 A probe uses none of its locals, so reference counting never keeps a value alive for one, and a debug build frees and
@@ -38,7 +40,8 @@ The emitter writes a probe as a check of whether the runtime is probing: the sta
 `$__nanyx_probing`, from the runtime's `nanyx:debug` `enabled` before anything else runs, and each function with probes
 copies it into a local when it starts, which can stay in a register. When it is set, the probe calls `nanyx:debug` `probe` with its
 number; if that gives 1, it writes each of its locals that is still alive there through its printer, and passes the
-local's name and text to `nanyx:debug` `local`. A local is still alive where the rest of the code reads it and doesn't
+local's name and text to `nanyx:debug` `local`, and then calls `nanyx:debug` `written`, so that the runtime knows they
+are all written and the statement hasn't run: where the debugger stops. A local is still alive where the rest of the code reads it and doesn't
 bind it again (`CoreIrEmitReads.ChainReads`, worked out once for each chain): one never read again may have been given up
 already. A probe that a printer
 takes its argument over from first gives it a reference of its own.
@@ -53,7 +56,33 @@ an entry, and its place, so the runtime knows each probe without the program tel
 with one (`WasmRunner.runListening`, an `IProbeListener`), each probe the program passes is given to it by its number in
 the table, and it says whether it wants the locals. `ShadowStack` keeps the frames from the probes, innermost first,
 each at the place of the last probe it passed: an entry pushes a frame, a statement moves the top one, and a return pops
-it. A function inlined into another has a frame of its own, since its probes were inlined with it.
+it. A function inlined into another has a frame of its own, since its probes were inlined with it. A crash's `nanyx:crash`
+`report` tells the listener too (`IProbeListener.Crashed`, through `CrashImport.defineWith`), before the trap, while the
+frames are still on the stack.
+
+# The debugger
+
+`nanyx run --debug` (`DebugCommand.cs`) compiles the program with probes and runs it under `DebugServer`, a Debug
+Adapter Protocol server on its standard input and output (`Dap` frames the messages). The program runs on a thread of
+its own, and what it writes goes to files (`ProgramIo.ToFiles`) that the server sends on as `output` events as they
+grow. The server is its listener. It keeps the shadow stack and decides at each probe whether to stop, by
+`DebugSession`, which knows the breakpoints and how the program goes on and has no other state:
+
+- **A breakpoint** is a line of a file, as the table of places names it, moved to the first line at or after it with a
+  statement probe (`SpanTable.statementLines`).
+- **Steps** are measured by the shadow stack's depth. A step in stops at the next statement. A step over stops at the
+  next statement at the same depth or shallower, and a step out at the next one shallower. A pause stops at the next
+  statement, or the next function's entry, since a loop that calls itself may have no statement.
+- **The place it stopped at** isn't stopped at again until another probe has passed, so that resuming at a breakpoint
+  goes on.
+
+To stop, the probe answers 1, the program writes the frame's locals, and its `written` blocks the program's thread
+until the client resumes it. The server keeps each frame's locals by its depth, dropping a depth's when a frame is
+entered or left there, so a frame further out has the locals of the last time it stopped in it. It doesn't ask
+anywhere else: asking at every statement printed 286 million characters for a recursion over a list of 5,000, against
+none ([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crash's `report` stops it with reason `exception`.
+The Variables view gets each local's text read back into a tree (`ValueTree`), whose parts are references the client
+expands, numbered afresh at each stop.
 
 # `dbg`
 
