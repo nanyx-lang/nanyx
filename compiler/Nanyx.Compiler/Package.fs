@@ -572,6 +572,13 @@ module Package =
             | Result.Error _ -> None
         | _ -> None
 
+    /// The linters built into the compiler that the package manifest a file is under turns on, if it has one that reads,
+    /// with its linter packages left unread: for a compile that can't run them.
+    let builtInLintersFor (filePath: string) : LinterOptions option =
+        match Manifest.tryFind (Path.GetDirectoryName(Path.GetFullPath filePath)) with
+        | Result.Ok (Some manifest) -> Manifest.read manifest |> Result.toOption |> Option.map _.Linters
+        | _ -> None
+
     /// An error for each `::` directive at the top of the file at `filePath`, whose text is `source`, which is in the
     /// package whose manifest is at `manifestPath`: directives say what a manifest would, for a script, which has none.
     let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
