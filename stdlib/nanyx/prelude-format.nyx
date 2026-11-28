@@ -55,7 +55,10 @@ export type BadFormat = (
   than 64 bits, takes a float's spec, then the name of one of its dimension's units after a space:
   its number is written in that unit by the spec, then the unit, so `format(1500ms, ".1f s")` is
   `"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
-  `format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
+  `format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's. The unit may be
+  a composite of the units of the dimension's base parts, joined by `*` and `/` and read from the
+  left, whose powers make its dimension: `format(36.0km / 1hr, ".1f m/s")` is `"10.0m/s"`, and
+  `format(2.0m * 3.0m, ".0f mm*mm")` is `"6000000mm*mm"`.
 
   A hole in a string writes its value by a spec written after a `:`, `"{price:.2f}"`, and the
   compiler checks the spec against the value's type, for a type the prelude formats and a unit
@@ -733,6 +736,96 @@ def fmtAfterLastSpace: string, int -> int = { spec, at ->
   if at < 0 then -1 else if fmtByte(spec, at) == 32 then at + 1 else fmtAfterLastSpace(spec, at - 1)
 }
 
+--| Where the name of a unit in a composite unit, `text`, that starts at the byte `at` ends: at the
+  next `*` or `/`, or the end.
+def fmtUnitNameEnd: string, int -> int = { text, at ->
+  def byte = fmtByte(text, at)
+  if byte == -1 or byte == 42 or byte == 47 then at else fmtUnitNameEnd(text, at + 1)
+}
+
+--| The base part, by its position, and the scale in its default storage units of the unit `name`, of
+  the units `names` of the parts `parts`, each `scales`.
+def fmtPartUnit
+  : string, list(string), list(int), list(float) -> #some(part: int, scale: float) | #none
+  = {
+    | name, [each, ...names], [part, ...parts], [scale, ...scales] ->
+      if each == name
+        then #some(part = part, scale = scale)
+        else fmtPartUnit(name, names, parts, scales)
+    | _, _, _, _ -> #none
+  }
+
+--| `powers` with `by` added to the one at `part`.
+def fmtAddPower: list(int), int, int -> list(int) = {
+  | [power, ...powers], 0, by -> [power + by, ...powers]
+  | [power, ...powers], part, by -> [power, ...fmtAddPower(powers, part - 1, by)]
+  | [], _, _ -> []
+}
+
+--| The composite unit `text` read from the byte `at`, the next name of which `sign` multiplies by,
+  `1`, or divides by, `-1`, after the powers of the parts `powers` and the scale `scale` it makes so
+  far: the powers and scale all of it makes, or the byte it stops being one at, with whether a name
+  is there that no part has a unit by, or no name.
+def fmtComposite
+  : string,
+    int,
+    int,
+    list(int),
+    float,
+    list(string),
+    list(int),
+    list(float)
+    -> #some(powers: list(int), scale: float) | #stops(at: int, named: bool)
+  = { text, at, sign, powers, scale, names, parts, scales ->
+    def end = fmtUnitNameEnd(text, at)
+
+    if end == at then #stops(at = at, named = false) else
+      match fmtPartUnit(__nanyx_string_slice(text, at, end - at), names, parts, scales)
+        | #none -> #stops(at = at, named = true)
+        | #some(unit) ->
+          def powers = fmtAddPower(powers, unit.part, sign)
+          def scale = if sign > 0 then scale * unit.scale else scale / unit.scale
+          def next = fmtByte(text, end)
+
+          if next == -1 then #some(powers = powers, scale = scale) else
+            fmtComposite(
+              text
+              end + 1
+              (if next == 42 then 1 else -1)
+              powers
+              scale
+              names
+              parts
+              scales
+            )
+  }
+
+--| `dimensions`, each to its power of `powers`, written as the compiler writes a dimension: `Length /
+  Time`, `Time * Time`, `Length / (Time * Time)`, `1 / Time`, or `a number` for none.
+def fmtDimensionText: list(int), list(string) -> string = { powers, dimensions ->
+  def repeated = { (sign: int) ->
+    list.flatMap(
+      list.zip(powers, dimensions)
+      { pair ->
+        def power, dimension = pair
+        def count = if power < 0 then 0 - power else power
+        if sign * power > 0 then list.replicate(dimension, count = count) else []
+      }
+    )
+  }
+
+  def times = " * "
+  def above = repeated(1)
+  def below = repeated(-1)
+  def dividend = if above == [] then "1" else __nanyx_string_join(above, times)
+  def divisor = __nanyx_string_join(below, times)
+
+  match below
+    | [] -> (if above == [] then "a number" else dividend)
+    | [single] -> "{dividend} / {single}"
+    | _ -> "{dividend} / ({divisor})"
+}
+
 --| `names` as a spec's `expected` lists them.
 def fmtUnitList: list(string) -> string = {
   | [] -> "no unit: the module sees none"
@@ -758,14 +851,35 @@ export def __measuredTryFormat
     string,
     string,
     string,
-    string
+    string,
+    list(string),
+    list(int),
+    list(float),
+    list(int),
+    list(string)
     -> #some(string) | #badFormat(BadFormat)
-  = { x, spec, names, scales, picks, pickScales, display, before, after, of ->
+  = { x, spec, names, scales, picks, pickScales, display, before, after, of, partNames, partOf, partScales, powers, dimensions ->
+    def length = __nanyx_string_length(spec)
+    def afterSpace = fmtAfterLastSpace(spec, length - 1)
+
+    def text = if afterSpace > 0
+      then __nanyx_string_slice(spec, afterSpace, length - afterSpace)
+      else ""
+
+    def composite = if text == "" then #stops(at = 0, named = false) else
+      fmtComposite(text, 0, 1, list.map(powers, { _ -> 0 }), 1.0, partNames, partOf, partScales)
+
     def unit = match fmtNamedUnit(spec, names, scales)
       | #some(named) -> named
       | #none ->
         def picked = fmtPickedUnit(x, picks, pickScales, display)
-        (name = picked.name, scale = picked.scale, at = __nanyx_string_length(spec) + 1)
+        def unnamed = (name = picked.name, scale = picked.scale, at = length + 1)
+
+        match composite
+          | #some(made) -> (if made.powers == powers
+            then (name = text, scale = made.scale, at = afterSpace)
+            else unnamed)
+          | #stops(_) -> unnamed
 
     def numberSpec = __nanyx_string_slice(spec, 0, unit.at - 1)
     def numberEnd = __nanyx_string_length(numberSpec)
@@ -778,11 +892,20 @@ export def __measuredTryFormat
       | #some(text) ->
         if unit.name == "" then #some("{before}{text}{after}") else #some(text ++ unit.name)
       | #badFormat(bad) ->
-        def afterSpace = fmtAfterLastSpace(numberSpec, numberEnd - 1)
+        def nameable = names ++ list.filter(partNames, { name -> not list.contains(names, name) })
 
-        if unit.at > numberEnd and afterSpace > 0 and afterSpace < numberEnd
-          then fmtBad(spec, of, afterSpace, "the name of a unit of {of}: {fmtUnitList(names)}")
-          else #badFormat(bad)
+        if unit.at > numberEnd and afterSpace > 0 and afterSpace < numberEnd then
+          match composite
+            | #some(made) ->
+              def makes = fmtDimensionText(made.powers, dimensions)
+              fmtBad(spec, of, afterSpace, "units that make {of}: `{text}` makes {makes}")
+            | #stops(stop) -> fmtBad(
+              spec
+              of
+              afterSpace + stop.at
+              "the name of a unit of {of}: {fmtUnitList(nameable)}"
+            )
+        else #badFormat(bad)
   }
 
 -- Text

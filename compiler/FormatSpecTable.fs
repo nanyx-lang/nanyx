@@ -72,4 +72,13 @@ let rows: (string * string * string * Outcome) list =
       "Time", "1500ms", ".1f parsec", Rejects(4, "the name of a unit of Time: `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`")
       "Time", "1500ms", ".1d ms", Rejects(2, floatKinds)
       "Time", "1500ms", "x", Rejects(0, floatKinds)
-      "Time", "1500ms", ".1f ms ", Rejects(3, "the end of the spec") ]
+      "Time", "1500ms", ".1f ms ", Rejects(3, "the end of the spec")
+      "Time", "1500ms", ".1f s/ms", Rejects(4, "units that make Time: `s/ms` makes a number")
+      "Time", "1500ms", ".1f s*s", Rejects(4, "units that make Time: `s*s` makes Time * Time")
+      "Time * Time", "1500ms * 2s", ".1f s*s", Takes
+      "Time * Time", "1500ms * 2s", "8.3e ms*s", Takes
+      "Time * Time", "1500ms * 2s", ".1f s", Rejects(4, "units that make Time * Time: `s` makes Time")
+      "Time * Time", "1500ms * 2s", ".1f s/s", Rejects(4, "units that make Time * Time: `s/s` makes a number")
+      "Time * Time", "1500ms * 2s", ".1f s*parsec", Rejects(6, "the name of a unit of Time * Time: `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`")
+      "Time * Time", "1500ms * 2s", ".1f s**s", Rejects(6, "the name of a unit of Time * Time: `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`")
+      "Time * Time", "1500ms * 2s", ".1f s*", Rejects(6, "the name of a unit of Time * Time: `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`") ]

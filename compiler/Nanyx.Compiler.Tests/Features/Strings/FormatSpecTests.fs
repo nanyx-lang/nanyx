@@ -7,13 +7,16 @@ open NyxCompiler
 open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
+let private timeUnits = [ "d"; "hr"; "min"; "s"; "ms"; "us"; "ns" ]
+
 let private formattedOf (typeName: string) =
     match typeName with
     | "int" | "I8" | "I16" | "I32" | "U8" | "U16" | "U32" | "U64" -> FormatSpecs.Formatted.Integer
     | "float" | "F32" -> FormatSpecs.Formatted.Float
     | "string" | "char" | "bool" -> FormatSpecs.Formatted.Text
     | "Instant" -> FormatSpecs.Formatted.Instant
-    | "Time" -> FormatSpecs.Formatted.Measured("Time", [ "d"; "hr"; "min"; "s"; "ms"; "us"; "ns" ])
+    | "Time" -> FormatSpecs.Formatted.Measured("Time", timeUnits, timeUnits |> List.map (fun name -> name, 0), [ 1 ], [ "Time" ])
+    | "Time * Time" -> FormatSpecs.Formatted.Measured("Time * Time", [], timeUnits |> List.map (fun name -> name, 0), [ 2 ], [ "Time" ])
     | other -> failwith $"No row's type is {other}"
 
 [<Fact>]
@@ -66,6 +69,20 @@ def s = "{2.5km:.1f parsec}"
     Assert.Equal(DiagnosticCodes.BadFormatSpec.Code, code)
     Assert.Equal("p", at)
     Assert.Equal("'.1f parsec' is no format spec for a 'Length(float)': at 4, it could have the name of a unit of Length: `km` or `m`", message)
+
+[<Fact>]
+let ``A composite unit in a hole's spec is checked, and one whose units make another dimension says what they make`` () =
+    let source =
+        withFinalNewline """dimension Length(float)
+@baseUnit unit m: Length
+unit km: Length = 1000m
+def ok = "{36.0km / 1hr:.1f km/hr} {2.0m * 3.0m:.0f m*m}"
+def s = "{36.0km / 1hr:.1f km*hr}"
+"""
+    let code, message, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.BadFormatSpec.Code, code)
+    Assert.Equal("k", at)
+    Assert.Equal("'.1f km*hr' is no format spec for a 'Length(float) / Time(float)': at 4, it could have units that make Length / Time: `km*hr` makes Time * Length", message)
 
 [<Fact>]
 let ``A spec for a type variable's value, or a type of the program's own, is left to the program as it runs`` () =
