@@ -12,4 +12,6 @@ import (
 )
 
 --| The reports of every rule implemented here about a module.
-export def lint: [Analysis] Module -> list(Report) = { _ -> [] }
+export def lint: [Analysis] Module -> list(Report) = { _ ->
+  []
+}
