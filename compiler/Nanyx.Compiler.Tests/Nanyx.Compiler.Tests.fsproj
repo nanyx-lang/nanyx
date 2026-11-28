@@ -175,6 +175,7 @@
     <Compile Include="Features\Linters\LinterTests.fs" />
     <Compile Include="Features\Linters\LintAnswersTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
+    <Compile Include="Features\Linters\OfficialLinterPackageTests.fs" />
     <Compile Include="Features\Linters\NonTailRecursionTests.fs" />
     <Compile Include="Features\Linters\UnreachableArmsTests.fs" />
     <Compile Include="Features\Linters\UnusedImportsTests.fs" />
@@ -329,6 +330,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
+    <!-- The linter tests run the official linter as its package, nanyx.lint, which is built and run on WebAssembly. -->
+    <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
+    <ProjectReference Include="..\Nanyx.Compiler.Runtime\Nanyx.Compiler.Runtime.fsproj" />
   </ItemGroup>
 
   <Import Project="..\CheckedLibrary.targets" />

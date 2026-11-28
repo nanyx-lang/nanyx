@@ -118,6 +118,25 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
         | Condition condition -> expr { full with Tail = false } condition
         | Binding(value, p) -> cat [ expr { full with Tail = false } value; text " is "; pattern p ]
 
+    /// The comments around an `if`'s `else`, placed, those before it and those after it. Before it, one on the `then`
+    /// branch's last line stays at the end of it, and one on a line of its own goes on a line of its own before the
+    /// `else`, at its indent. After it, one on the `else`'s line stays at the end of that line, and any other goes on a
+    /// line of its own before the branch.
+    let commentsAroundElse (thenBranch: Expression) (elseBranch: Expression) : Doc list * Doc list =
+        if not (sourceText.Valid thenBranch.Span && sourceText.Valid elseBranch.Span) then [], []
+        else
+            let start, finish = thenBranch.Span.End, elseBranch.Span.Start
+            let inComment offset =
+                placement.UnplacedIn(start, finish)
+                |> List.exists (fun i ->
+                    let _, span = placement.Comment i
+                    span.Start <= offset && offset < span.End)
+            match sourceText.WordOffsets "else" start finish |> List.filter (inComment >> not) |> List.tryLast with
+            | Some elseKeyword ->
+                let before = placement.PlaceAfter start elseKeyword
+                before, placement.PlaceAfter (elseKeyword + 4) finish
+            | None -> [], []
+
     let ifDoc (e: Expression) : Doc =
         let head, thenBranch, elseBranch = (ifArm e).Value
         // `if | a -> x | b -> y | else -> z` is parsed as nested ifs, each after the first spanning from its `|`.
@@ -175,9 +194,13 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                     match elseBranch with
                     | None -> Doc.empty
                     | Some elseBranch ->
-                        let keyword = if isBlock thenBranch then cat [ hard; text "else" ] else text " else"
-                        if isBlock elseBranch then cat [ keyword; nest (cat [ hard; block elseBranch ]) ]
-                        else cat [ keyword; text " "; expr full elseBranch ]
+                        let beforeElse, afterElse = commentsAroundElse thenBranch elseBranch
+                        let keyword =
+                            if not beforeElse.IsEmpty then cat [ cat beforeElse; hard; text "else" ]
+                            elif isBlock thenBranch then cat [ hard; text "else" ]
+                            else text " else"
+                        if isBlock elseBranch then cat [ keyword; nest (cat [ cat afterElse; hard; block elseBranch ]) ]
+                        else cat [ keyword; text " "; expr full elseBranch; cat afterElse ]
                 cat [ text "if "; ifHead head; thenDoc; elseDoc ]
 
     /// `for xs, ys | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the elements. One arm

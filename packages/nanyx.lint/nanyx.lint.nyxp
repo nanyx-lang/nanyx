@@ -1,0 +1,156 @@
+(
+  package = (
+    name = "nanyx.lint"
+    version = "0.54.0"
+    repository = "nanyx-lang/nanyx"
+    nanyx = "0.54"
+    sources = ["src/**/*.nyx"]
+    linter = (
+      root = "lint"
+      name = "default"
+      rules = [
+        (
+          id = "unusedBindings"
+          title = "Unused binding"
+          severity = #warning
+          unnecessary = true
+          description = "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported."
+        )
+        (
+          id = "nonTailRecursion"
+          title = "Recursive call not in tail position"
+          severity = #info
+          description = "A function calls itself, but not as the last thing it does, so every call keeps a stack frame and a deep enough input runs out of stack. A call in tail position uses no stack."
+        )
+        (
+          id = "unreachableArms"
+          title = "Unreachable match arm"
+          severity = #warning
+          unnecessary = true
+          description = "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them match every tag, boolean, int, length of list or combination of them it does."
+        )
+        (
+          id = "unusedImports"
+          title = "Unused import"
+          severity = #warning
+          unnecessary = true
+          description = "An import that nothing in the module uses: no value, type or context it brings in is referred to, under its alias or unqualified. An alias starting with `_` is not reported."
+        )
+        (
+          id = "noTagInCommon"
+          title = "Comparison of types with no tag in common"
+          severity = #warning
+          description = "`==` or `!=` on two values whose types are closed tag unions with no tag in common, so that the comparison is always false (or always true)."
+        )
+        (
+          id = "unusedPrivateDefinitions"
+          title = "Unused private definition"
+          severity = #warning
+          unnecessary = true
+          description = "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, a `@test`, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported."
+        )
+        (
+          id = "unreachableCode"
+          title = "Unreachable code"
+          severity = #warning
+          unnecessary = true
+          description = "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`, or after a `return`, and the arguments of a call after one that never gives a value. They can never run."
+        )
+        (
+          id = "useInBraces"
+          title = "`use ... in` with a body in braces"
+          severity = #warning
+          description = "`use X in \{ ... \}`, whose body is a function of no arguments, not a block run with `X` loaded. Put the statements on the lines after `in`, indented."
+        )
+        (
+          id = "strayDocComments"
+          title = "Doc comment documents nothing"
+          severity = #warning
+          description = "A doc comment (`--|`) documents the definition, type, context member, field or tag on the line after it, or the module at the top of the file. One followed by anything else documents nothing."
+        )
+        (
+          id = "unannotatedExports"
+          title = "Exported definition without a type annotation"
+          severity = #warning
+          description = "An exported top-level def that does not write its type. Other modules use it by its type, so write it down."
+        )
+        (
+          id = "resultOnlyTypeVariable"
+          title = "Type variable only in the result"
+          severity = #warning
+          description = "A function whose result has a type variable that a context it requires names but no parameter fixes: nothing at a call says which type it is but a type written on the result. Take it as a type argument."
+        )
+        (
+          id = "unusedResults"
+          title = "Unused result"
+          severity = #error
+          description = "A statement of a block, other than its last, whose value is not `()` and is thrown away. Bind it to a name, or pass it to `ignore` to say it is not needed."
+        )
+        (
+          id = "uselessExpressions"
+          title = "Useless expression"
+          severity = #error
+          description = "A statement of a block, other than its last, whose value is thrown away and which can do nothing else, because neither its type nor any call in it requires a context. Remove it, or use its value."
+        )
+        (
+          id = "unawaitedTask"
+          title = "Unawaited task"
+          severity = #warning
+          description = "A task that is thrown away though what it gives back isn't `()`: its value is never read. Await it, or start it for what it does, giving back `()`."
+        )
+        (
+          id = "shadowedPreludeNames"
+          title = "Definition hides a prelude member"
+          severity = #warning
+          description = "A def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore` or `pow`, so the prelude's can't be named where it is in scope."
+        )
+        (
+          id = "semicolons"
+          title = "Statements separated by `;`"
+          severity = #warning
+          description = "Statements separated by `;` on one line. Put each statement on a line of its own; turn the rule off to write short sequences on one line."
+        )
+        (
+          id = "unconstructibleType"
+          title = "Exported type no one outside its module can get"
+          severity = #error
+          description = "An exported `protected` or `private` type that nothing its module exports gives out, so no code outside the module can get a value of it. Export a function that returns one."
+        )
+        (
+          id = "unusedContexts"
+          title = "Unused context"
+          severity = #warning
+          unnecessary = true
+          description = "A context a def's signature requires that nothing in its body uses: no member of it is read, and nothing the body calls requires it. Every caller must supply it for nothing. Exported defs are not reported."
+        )
+        (
+          id = "repeatedPulls"
+          title = "Sequence with effects pulled more than once"
+          severity = #warning
+          description = "A sequence whose steps require contexts is pulled more than once on some path, so its steps, and their effects, run again. Pull it once into a list with `seq.toList` and use that."
+        )
+        (
+          id = "redundantTypeName"
+          title = "Redundant type name"
+          severity = #hint
+          unnecessary = true
+          description = "A pipe names the type a definition is attached to, as in `people \\list.map`, where the piped value's type already finds it: `people \\map` calls the same definition."
+        )
+        (
+          id = "undefinedPayloadArm"
+          title = "Arm for a tag whose payload is undefined"
+          severity = #hint
+          unnecessary = true
+          description = "A match arm for a tag whose payload is `undefined`, such as `#some(x)` on the head of a `list(undefined)`: no value has that tag, so the arm can never match."
+        )
+        (
+          id = "unusedAllows"
+          title = "`@allow` that suppresses nothing"
+          severity = #warning
+          description = "An `@allow` names a linter rule that reports nothing in the definition after it. Remove it."
+        )
+      ]
+    )
+  )
+  dependencies = [(package = "nanyx.analysis", version = "0.54.0")]
+)

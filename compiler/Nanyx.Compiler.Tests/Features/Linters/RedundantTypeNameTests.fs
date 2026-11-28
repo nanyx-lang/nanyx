@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.Linters.RedundantTypeName
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // A pipe's type name that the piped value's type already says, `people \list.map`, is drawn faint, with a fix that
 // removes it (#3159).
@@ -10,7 +11,7 @@ open NyxCompiler
 /// is reported at, and the text its fix gives. The module must type-check, or no linter would run.
 let private reported (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = "default/redundantTypeName")
@@ -36,7 +37,7 @@ let ``A pipe to a list's definition, of a list, has its type name drawn faint, a
     Assert.Equal("list.", at)
     Assert.Equal(people + "\ndef names = people \\map { p -> p.name }\n", fixedText)
     // The fixed pipe calls the same definition, and has no type name left to report.
-    let fixedResult = Compiler.compileWith Linters.everyLinter fixedText
+    let fixedResult = Compiler.compileWith (everyLinter ()) fixedText
     Assert.Empty(fixedResult.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = "default/redundantTypeName" || Diagnostics.isError diagnostic))
     let typeOf (result: CompileResult) = result.Typed.Value.Types.["names"]
     Assert.Equal(typeOf (Compiler.compileWith Linters.none (source.ReplaceLineEndings "\n")), typeOf fixedResult)

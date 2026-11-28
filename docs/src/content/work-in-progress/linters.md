@@ -189,15 +189,15 @@ diagnostic with the rule's code, `<name>/<rule>`, and the severity the project c
 
 ## How it runs
 
-The first three of these are built for a linter package a manifest names ([Lint builds](../deep-dives/lint-builds));
-what is left is the official linter becoming one, and the playground.
+The first three of these are built ([Lint builds](../deep-dives/lint-builds)), and the official linter runs as its
+package; what is left is moving its rules into the package, and the playground.
 
 - **Found as a package.** A `linters` entry names a package at a version, or by `path`, resolved and locked as a
   dependency is, and the lockfile pins it. The official linter is the shipped `nanyx.lint`, seeded with the compiler,
   so it resolves offline. A script's `::linter nanyx.lint` takes the seeded version, as `::install` does.
 - **Built once.** The compiler builds a lint build of the linter, its `lint` passed to the linter host's `run` as a
   test build passes its tests, compiles it to WebAssembly, and keeps it in the package cache by the SHA-256 of its files
-  and the compiler's version. A shipped linter is to be built when it is seeded.
+  and the compiler's version. A shipped linter is built the first time a project uses it.
 - **Run per module.** For each module that type-checked, the host starts an instance of the lint build, as the test
   runner starts one per test, answers the `Analysis` queries as imports from the compiler's side tables, and reads the
   reports back. The compiled module is kept per linter, so a keystroke in the editor costs an instance and a call, not a
@@ -252,11 +252,13 @@ and its tests show it reports what it did:
    ([#3172](https://github.com/nanyx-lang/nanyx/issues/3172)): built. A package declares itself a linter in its
    manifest, a project names it in its `linters` by `path` or version, and `nanyx check`, `build`, `run`, `test` and
    the language server build its lint build once, keep it in the package cache, and run it, as
-   [Lint builds](../deep-dives/lint-builds) describes. Left for the next stage: a script's `::linter` naming a shipped
-   linter package, which needs one to name.
-2. **The package.** `nanyx.lint` under `packages/`, at the compiler's version, declaring every rule. The host runs it
-   as the official linter, and runs the F# rule for each rule the package doesn't implement yet. A script's
-   `::linter nanyx.lint` takes its seeded version, as `::install` does, and seeding builds its lint build.
+   [Lint builds](../deep-dives/lint-builds) describes.
+2. **The package** ([#3174](https://github.com/nanyx-lang/nanyx/issues/3174)): built. `nanyx.lint` is under
+   `packages/`, at the compiler's version, declaring every rule, and implementing none yet. A manifest's
+   `nanyx.lint` entry and a script's `::linter nanyx.lint` read its seeded copy, offline, and the host runs it as the
+   official linter, with the F# rule for each rule it doesn't implement (`Linters.packageRules`), as
+   [Lint builds](../deep-dives/lint-builds#the-official-linter) describes. Its lint build is built the first time a
+   project uses it, not when it is seeded: seeding is the compiler's core, which can't build one.
 3. **The rules**, a group at a time: the `unused*` rules; `unreachableArms` and `unreachableCode`; `unusedResults`,
    `uselessExpressions` and `unawaitedTask`; the style rules (`semicolons`, `strayDocComments`, `useInBraces`,
    `shadowedPreludeNames`); the rules about types (`unannotatedExports`, `resultOnlyTypeVariable`,
