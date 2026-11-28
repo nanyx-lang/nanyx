@@ -51,10 +51,15 @@ The official linter is moving from F# rules compiled into the compiler (`Linters
 `nanyx.lint`, whose manifest declares every rule `Linters.official` has, with the same ids, titles, severities and
 descriptions; a test checks that they stay the same. `Package.linterOptions` runs the package's lint build as the
 official linter (`Linters.withPackage`): the package's reports, and those of the compiler's own rules for each rule the
-package doesn't implement yet. `Linters.packageRules` names those it does, and grows as each group of rules moves. Where
-the package can't be made, in the compiler's core or the browser's, which can't run a lint build, the compiler's rules
-run alone. The linter tests (`Features/Linters`) run the official linter as a project does, through the package
-(`TestSupport.officialLinter`).
+package doesn't implement yet, ordered rule by rule as `Linters.official` declares its rules, so diagnostics come out in
+the same order whichever implements a rule. `Linters.packageRules` names those the package implements, and grows as each
+group of rules moves; the compiler keeps only the `Rule` of each, which configuration and `@allow` read. Where the
+package can't be made, in the compiler's core or the browser's, which can't run a lint build, the compiler's rules run
+alone, without those that have moved. The linter tests (`Features/Linters`) and the language server's run the official
+linter as a project does, through the package (`TestSupport.officialLinter`, `LanguageServerTestBase.TestSettings`).
+
+The package's rules walk the tree in `lint.tree`, as `SyntaxTree` does in the compiler, and make their fixes' edits in
+`lint.edits`, as `SourceEdits` does. Its spans are offsets into the module's text, as the compiler's are.
 
 ## The lint build
 

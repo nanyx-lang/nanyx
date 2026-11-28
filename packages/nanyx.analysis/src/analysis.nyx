@@ -99,7 +99,9 @@ export context Analysis = (
   typeOfSymbol: SymbolId -> #some(Ty) | #unknown
   --| The contexts a top-level def requires, written or inferred.
   contextsOf: SymbolId -> list(Ty)
-  --| The nodes in the module that refer to a symbol.
+  --| The nodes in the module that refer to a symbol: for an import, the names that came in
+    through it. A call the compiler made for a node, rather than one written, refers to what the
+    node is written to refer to.
   referencesTo: SymbolId -> list(NodeId)
   --| The nodes desugaring made for a node as written, such as a workflow bind's call, whose types
     `typeOf` has too.
@@ -115,4 +117,13 @@ export context Analysis = (
   redundantTypeName: NodeId -> bool
   --| The module's doc comments, each with what it documents.
   docComments: () -> list(DocComment)
+  --| Whether the module can name a context by this name: one it declares or imports, not a
+    type or a context variable.
+  isContext: string -> bool
+  --| The name of the context whose member a name, call or operator refers to, if it refers to a
+    member of one the module can name, as `x + y` does to `Add`'s.
+  contextOfMember: NodeId -> #some(string) | #none
+  --| The names of the module's defs that an instance built from a type's attached definitions
+    picks up somewhere in it, which nothing names but are used.
+  instanceDefinitions: () -> list(string)
 )
