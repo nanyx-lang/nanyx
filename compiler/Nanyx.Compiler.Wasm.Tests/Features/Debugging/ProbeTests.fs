@@ -14,11 +14,13 @@ open TranspilerWasmTestHelpers
 type private Heard =
     { Passed: string list
       Stacks: string list list
-      Locals: (string * string) list }
+      Locals: (string * string) list
+      /// What the program wrote to stderr: what each `dbg` printed.
+      Stderr: string }
 
 /// Runs `source`, saved as `main.nyx`, compiled as `nanyx run` compiles it, with a test host listening to its probes,
-/// which asks for the locals at each probe `wanted` says to.
-let private listen (wanted: Probe -> bool) (source: string) =
+/// which asks each probe for what `wanted` says of the locals.
+let private hearing (wanted: Probe -> LocalsWanted) (source: string) =
     use directory = new TempDirectory()
     directory.Write "main.nyx" source
     // On a large stack, as `nanyx run` compiles: the backend recurses once per operand of a chain of operators (#2946).
@@ -44,7 +46,7 @@ let private listen (wanted: Probe -> bool) (source: string) =
                     passed.Add $"{kind} {line}"
                     stacks.Add(inMain stack.Frames |> List.map string)
                     wanted probe
-                | _ -> false
+                | _ -> NoLocals
             member _.Local(name, text) = locals.Add((name, text))
             member _.Written() = ()
             member _.Crashed _ = () }
@@ -53,8 +55,12 @@ let private listen (wanted: Probe -> bool) (source: string) =
     let input = Path.Combine(directory.Path, "input.txt")
     File.WriteAllText(input, "")
     match WasmRunner.runListening (Redirected(input, output, error, [])) [ "main" ] [] (Transpiler.Wasm.WasmBinary.assemble wat) listener with
-    | Ok () -> { Passed = List.ofSeq passed; Stacks = List.ofSeq stacks; Locals = List.ofSeq locals }
+    | Ok () -> { Passed = List.ofSeq passed; Stacks = List.ofSeq stacks; Locals = List.ofSeq locals; Stderr = Text.Encoding.UTF8.GetString(error.ToArray()) }
     | Error error -> failwith $"The program failed: %A{error}"
+
+/// `hearing`, asking for the locals in full at each probe `wanted` says to, and for none elsewhere.
+let private listen (wanted: Probe -> bool) (source: string) =
+    hearing (fun probe -> if wanted probe then InFull else NoLocals) source
 
 let private program =
     """def double = { n: int ->
@@ -162,3 +168,43 @@ println(count(1000000, 0))
 let ``A release build has no probes, nor does a debug build written to a file`` () =
     let wat = transpileWatWith { WasmOptions.Default with Places = true } "println(1)"
     Assert.DoesNotContain("nanyx:debug", wat)
+
+/// A tail recursion over a list of `n` elements, whose locals at each call include the rest of the list.
+let private recursion (n: int) =
+    $"""def total = {{ xs: list(int), acc: int ->
+  match xs
+    | [] -> acc
+    | [h, ...t] -> total(t, acc + h)
+}}
+
+println(total(list.init({n}, {{ i -> i }}), 0))
+"""
+
+[<Fact>]
+let ``Asked within a budget at every statement, a probe writes each local up to the budget and no further`` () =
+    // Asked for in full, statement k writes the 5,000 - k elements left: 285,893,471 characters in all (#3253).
+    let heard = hearing (fun probe -> if probe.Kind = Statement then WithinBudget else NoLocals) (recursion 5000)
+    let written = heard.Locals |> List.sumBy (fun (_, text) -> text.Length)
+    let statements = heard.Passed |> List.filter (fun probe -> probe.StartsWith "statement") |> List.length
+    Assert.True(written < statements * 2 * 300, $"{written:N0} characters for {statements:N0} statements")
+    // The whole list is cut short, at an element, and ends in `…`; its accumulator is written whole.
+    let firstList = heard.Locals |> List.find (fun (name, _) -> name = "xs") |> snd
+    Assert.StartsWith("[0, 1, 2, 3", firstList)
+    Assert.EndsWith(", …]", firstList)
+    Assert.Contains(("acc", "0"), heard.Locals)
+
+[<Fact>]
+let ``A local within the budget is written whole, and in full it is never cut short`` () =
+    let budgeted = hearing (fun probe -> if probe.Kind = Statement then WithinBudget else NoLocals) (recursion 3)
+    Assert.Contains(("xs", "[0, 1, 2]"), budgeted.Locals)
+    let full = hearing (fun probe -> if probe.Kind = Statement then InFull else NoLocals) (recursion 300)
+    Assert.DoesNotContain(full.Locals, fun (_, text) -> text.Contains "…")
+
+[<Fact>]
+let ``dbg writes its value in full while the probes write theirs within a budget`` () =
+    let heard =
+        hearing
+            (fun probe -> if probe.Kind = Statement then WithinBudget else NoLocals)
+            "def show = { xs: list(int) ->\n  dbg(xs)\n  list.length(xs)\n}\n\nprintln(show(list.init(1000, { i -> i })))\n"
+    Assert.Contains(", 998, 999]", heard.Stderr)
+    Assert.Contains(heard.Locals, fun (name, text) -> name = "xs" && text.EndsWith ", …]")

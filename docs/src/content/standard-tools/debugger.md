@@ -49,11 +49,11 @@ set or an array into its elements, a map into its entries by key, a tag into its
 into its shape's. A function's value says it is one, `<function int -> int>`, and a value no printer writes says its
 type, `<value of MArray(int)>`.
 
-The debugger asks for a frame's locals only where the program stops, since writing every frame's at every statement
-would slow the program down without bound when a local is large
-([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). So the frame the program stopped in shows its locals as they
-are. A frame further out shows them as they were the last time the program stopped in it, under **Locals at line N**.
-If the program never stopped in that frame, it says its locals weren't recorded: set a breakpoint in it to see them.
+The frame the program stopped in shows its locals whole, as they are. A frame further out shows them as they were at
+its last statement, the call it is in, under **Locals at line N**, though the program never stopped there. To keep that
+cheap, a frame's locals are written at every statement with a budget of 256 characters each, so a large value further
+out ends in `…`, and the scope says its values are cut short: stop in that frame to see them whole
+([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)).
 
 # Crashes
 

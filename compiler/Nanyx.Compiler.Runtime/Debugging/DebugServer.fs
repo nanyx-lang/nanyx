@@ -89,10 +89,13 @@ module DebugServer =
         let mutable terminating = false
         let mutable resumed: (Resume option) = None
         let stack = ShadowStack()
-        // Each frame's locals the last time the program stopped in it, by its depth, with the line it was at.
+        // Each frame's locals as of its last statement, by its depth, with the line it was at: written within a budget
+        // where the program went on, and in full where it stopped (see `LocalsWanted`).
         let frameLocals = Collections.Generic.Dictionary<int, (string * string) list * int>()
         let written = ResizeArray<string * string>()
         let mutable pending: (StopReason * Location) option = None
+        // Where a statement the program goes on from asked for the locals, which are kept as its frame's without stopping.
+        let mutable recordingAt: Location option = None
         let mutable stopped: StoppedFrame list = []
         // What each variables reference stands for, while the program is stopped: a frame's locals, or a value's parts.
         let references = Collections.Generic.Dictionary<int, (string * ValueTree) list>()
@@ -152,22 +155,22 @@ module DebugServer =
                         // A new frame: what the debugger had at its depth was another's.
                         frameLocals.Remove(stack.Depth) |> ignore
                         match locationOf probe with
-                        | None -> false
+                        | None -> NoLocals
                         | Some at ->
                             let reason = lock gate (fun () -> let reason, next = DebugSession.onEntry at session in session <- next; reason)
                             match reason with
                             | Some reason ->
                                 written.Clear()
                                 pending <- Some(reason, at)
-                                true
-                            | None -> false
+                                InFull
+                            | None -> NoLocals
                     | Return ->
                         frameLocals.Remove before |> ignore
                         locationOf probe |> Option.iter (fun at -> lock gate (fun () -> session <- DebugSession.passed at session))
-                        false
+                        NoLocals
                     | Statement ->
                         match locationOf probe with
-                        | None -> false
+                        | None -> NoLocals
                         | Some at ->
                             // Read and written at once, so that a pause the client asks for meanwhile isn't lost.
                             let reason =
@@ -179,13 +182,19 @@ module DebugServer =
                                         else DebugSession.onStatement at session
                                     session <- next
                                     reason)
+                            written.Clear()
                             match reason with
                             | Some reason ->
-                                // It stops once the locals are written, before the statement runs (see `Written`).
-                                written.Clear()
+                                // It stops once the locals are written, before the statement runs (see `Written`), and
+                                // shows them whole.
                                 pending <- Some(reason, at)
-                                true
-                            | None -> false
+                                InFull
+                            | None ->
+                                // Each statement's locals are kept as its frame's, so that a frame further out shows its
+                                // locals as of its call. Within a budget each, so that a large value, written at every
+                                // statement, costs no more than a small one (#3253).
+                                recordingAt <- Some at
+                                WithinBudget
                 member _.Local(name, text) = written.Add((name, text))
                 member _.Written() =
                     match pending with
@@ -198,7 +207,12 @@ module DebugServer =
                             | AfterStep -> "step"
                             | Paused -> "pause"
                         stopHere reason None (Some at)
-                    | None -> ()
+                    | None ->
+                        match recordingAt with
+                        | Some at ->
+                            recordingAt <- None
+                            frameLocals.[at.Depth] <- (List.ofSeq written, at.Line)
+                        | None -> ()
                 member _.Crashed message = stopHere "exception" (Some message) None }
 
         // The program, once the client has set its breakpoints, on a thread of its own, which ends the session.
@@ -313,7 +327,12 @@ module DebugServer =
                     | Some { Locals = Some(locals, line) } ->
                         let parts = locals |> List.map (fun (name, text) -> name, ValueTree.parse text)
                         let reference = lock gate (fun () -> referenceOf parts)
-                        let name = if frameId = 1 then "Locals" else $"Locals at line {line}"
+                        let name =
+                            if frameId = 1 then "Locals"
+                            // Written within a budget as the program went on: a value cut short ends in `…`.
+                            elif locals |> List.exists (fun (_, text) -> text.Contains "…") then
+                                $"Locals at line {line}, values cut short: stop in this frame to see them whole"
+                            else $"Locals at line {line}"
                         respond request [ "scopes", Dap.array [ Dap.object [ "name", Dap.string name; "variablesReference", Dap.number reference; "expensive", Dap.boolean false ] ] ]
                     | Some _ ->
                         respond
@@ -321,7 +340,7 @@ module DebugServer =
                             [ "scopes",
                               Dap.array
                                   [ Dap.object
-                                        [ "name", Dap.string "Locals not recorded: the program ran through this frame; set a breakpoint in it"
+                                        [ "name", Dap.string "No locals yet: this frame hasn't reached a statement"
                                           "variablesReference", Dap.number 0
                                           "expensive", Dap.boolean false ] ] ]
                     | None -> refuse request "There is no such frame"
