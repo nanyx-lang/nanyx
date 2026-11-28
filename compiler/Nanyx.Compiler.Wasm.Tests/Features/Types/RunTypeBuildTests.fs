@@ -48,6 +48,16 @@ show(zeroOf(type Role))
     |> assertRan "(age = 0, name = none, role = #member(0), settings = (dark = false, level = 0), tags = [])\n[]\n#member(0)\n"
 
 [<Fact>]
+let ``Run - a record whose fields are named values and env is built from its description`` () =
+    let source =
+        zeroOf
+        + """type Match = (values: list(int), env: string, arms: list(string))
+
+show(zeroOf(type Match))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "(arms = [], env = none, values = [])\n"
+
+[<Fact>]
 let ``Run - a build whose function fails on one field gives that failure, and no value`` () =
     let source =
         zeroOf
