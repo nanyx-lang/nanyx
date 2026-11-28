@@ -45,7 +45,9 @@ let private listen (wanted: Probe -> bool) (source: string) =
                     stacks.Add(inMain stack.Frames |> List.map string)
                     wanted probe
                 | _ -> false
-            member _.Local(name, text) = locals.Add((name, text)) }
+            member _.Local(name, text) = locals.Add((name, text))
+            member _.Written() = ()
+            member _.Crashed _ = () }
     use output = new MemoryStream()
     use error = new MemoryStream()
     let input = Path.Combine(directory.Path, "input.txt")

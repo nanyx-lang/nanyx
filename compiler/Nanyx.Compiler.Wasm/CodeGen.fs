@@ -1342,6 +1342,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               $"""  (import "{CoreIrEmitImports.probeModule}" "enabled" (func ${CoreIrEmitImports.probingEnabled} (result i32)))"""
               $"""  (import "{CoreIrEmitImports.probeModule}" "probe" (func ${CoreIrEmitImports.probeCall} (param i32) (result i32)))"""
               $"""  (import "{CoreIrEmitImports.probeModule}" "local" (func ${CoreIrEmitImports.probeLocal} (param i32 i32)))"""
+              $"""  (import "{CoreIrEmitImports.probeModule}" "written" (func ${CoreIrEmitImports.probeWritten}))"""
           if facts.UsesDbgHelpers && (options.Probes || options.DbgToEmbedder) then
               $"""  (import "{CoreIrEmitImports.probeModule}" "dbg" (func ${CoreIrEmitImports.dbgImport} (param i32 i32 i32 i32) (result i32)))"""
           if facts.UsesShownValues && (options.Probes || options.DbgToEmbedder) then

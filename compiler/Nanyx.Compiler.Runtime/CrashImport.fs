@@ -10,14 +10,20 @@ open Wasmtime
 module CrashImport =
     let moduleName = "nanyx:crash"
 
-    /// Defines `report` in `linker`, which keeps the message it is given in `reported`, and `deferred`, which sets
-    /// `deferred`. The message is read through the caller's memory, so a crash while the module is being instantiated,
-    /// in its start function, reports it too.
-    let define (linker: Linker) (reported: string option ref) (deferred: bool ref) =
+    /// Defines `report` in `linker`, which keeps the message it is given in `reported`, and gives it to `crashed` before
+    /// the program traps, its frames still on the stack, and `deferred`, which sets `deferred`. The message is read
+    /// through the caller's memory, so a crash while the module is being instantiated, in its start function, reports it
+    /// too.
+    let defineWith (linker: Linker) (reported: string option ref) (deferred: bool ref) (crashed: string -> unit) =
         linker.DefineFunction(moduleName, "deferred", Action(fun () -> deferred.Value <- true))
         linker.DefineFunction(
             moduleName,
             "report",
             CallerAction<int, int>(fun caller address length ->
                 let memory = caller.GetMemory("memory")
-                reported.Value <- Some(Text.Encoding.UTF8.GetString(memory.GetSpan(int64 address, length)))))
+                let message = Text.Encoding.UTF8.GetString(memory.GetSpan(int64 address, length))
+                reported.Value <- Some message
+                crashed message))
+
+    /// `defineWith`, telling nobody of the crash before the trap.
+    let define (linker: Linker) (reported: string option ref) (deferred: bool ref) = defineWith linker reported deferred ignore

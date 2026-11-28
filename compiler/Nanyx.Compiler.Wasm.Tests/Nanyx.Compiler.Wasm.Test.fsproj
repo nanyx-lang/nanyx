@@ -98,6 +98,9 @@
     <Compile Include="Features\Dbg\RunDbgChannelTests.fs" />
     <Compile Include="Features\Dbg\ShowValuesTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
+    <Compile Include="Features\Debugging\ValueTreeTests.fs" />
+    <Compile Include="Features\Debugging\DebugSessionTests.fs" />
+    <Compile Include="Features\Debugging\DebugAdapterTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Components\ComponentBuildTests.fs" />
     <Compile Include="Features\Components\LibraryComponentTests.fs" />
