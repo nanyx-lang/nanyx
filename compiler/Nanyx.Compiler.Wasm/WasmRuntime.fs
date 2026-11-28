@@ -151,6 +151,17 @@ module Helpers =
     let tagBoxAt = "__nanyx_tag_box_at"
     /// A string in double quotes, escaped as a string literal is written: what `dbg` prints a string as.
     let stringQuote = "__nanyx_string_quote"
+    /// The characters a debug build's printers may still write of the local a probe is writing, or -1 for no limit, as
+    /// for `dbg` and `assert` (see `CoreIrLowerDbg`): a global, which a probe sets around each local it writes.
+    let showBudget = "__nanyx_show_budget"
+    /// How many characters a probe writes a local in when the runtime asks for the locals within a budget: enough for a
+    /// small record or a short list, so that a statement writes at most a few thousand, however large its values.
+    let showBudgetPerLocal = 256
+    /// Whether a debug build's printers have written all the characters they may (see `showBudget`), so that a printer
+    /// writes `…` rather than its value.
+    let showSpent = "__nanyx_show_spent"
+    /// Takes the length of a string a debug build's printer wrote from what they may still write (see `showBudget`).
+    let showTake = "__nanyx_show_take"
     /// The string of one `char`, its code point's UTF-8 encoding: what `dbg` prints a char as, quoted.
     let charToString = "__nanyx_char_to_string"
     /// The letter after the `\` that escapes a byte in a string literal, or 0 for a byte written as it is.
@@ -1054,6 +1065,36 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                 yield "  end"
             yield "  i32.const 0"
             yield ")" ]
+      Helpers.showSpent,
+      lines
+          [ $"(func ${Helpers.showSpent} (result i32)"
+            $"  global.get ${Helpers.showBudget}"
+            "  i32.eqz"
+            ")" ]
+      // No limit, -1, stays one; a limit stops at 0.
+      Helpers.showTake,
+      lines
+          [ $"(func ${Helpers.showTake} (param $s i32)"
+            "  (local $left i32)"
+            $"  global.get ${Helpers.showBudget}"
+            "  local.tee $left"
+            "  i32.const 0"
+            "  i32.le_s"
+            "  if"
+            "    return"
+            "  end"
+            "  local.get $left"
+            "  local.get $s"
+            $"  call ${Helpers.stringLength}"
+            "  i32.sub"
+            "  local.tee $left"
+            "  i32.const 0"
+            "  local.get $left"
+            "  i32.const 0"
+            "  i32.gt_s"
+            "  select"
+            $"  global.set ${Helpers.showBudget}"
+            ")" ]
       // Measures the quoted string first, a byte for each byte and one more for each escaped, then writes it.
       Helpers.stringQuote,
       lines
@@ -1330,6 +1371,8 @@ let helperDependencies =
       Helpers.intToFloat, []
       Helpers.escapeByte, []
       Helpers.stringQuote, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.escapeByte ]
+      Helpers.showSpent, []
+      Helpers.showTake, [ Helpers.stringLength ]
       Helpers.intAdd, []
       Helpers.intSub, []
       Helpers.intMul, []

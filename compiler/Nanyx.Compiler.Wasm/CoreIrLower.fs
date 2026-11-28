@@ -73,7 +73,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         { NewVar = fun name kind ty -> newVar (uniqueName name) kind ty
           NewTemp = newTemp
           PrinterOf = fun printer -> request (SpecKey.plain (CoreIrLowerDbg.key printer) []) Map.empty (Printing printer)
-          ToIrType = toIrType }
+          ToIrType = toIrType; Budgeted = input.Probes }
 
     // In a debug build, the name and type of each parameter and `def` local, by id: those a probe writes (see
     // `CoreIrProbes`).

@@ -37,7 +37,11 @@ type PrinterTools =
       NewTemp: IrType -> Var
       /// The name of the printer's function, which is lowered in turn if it was not asked for before.
       PrinterOf: Printer -> string
-      ToIrType: Ty -> IrType }
+      ToIrType: Ty -> IrType
+      /// Whether the printers keep to a budget (see `Helpers.showBudget`): in a debug build, whose probes write each
+      /// local with one, so that a large value costs no more to write than a small one. `dbg` and `assert` have no limit
+      /// there, and a build without probes has printers without the checks.
+      Budgeted: bool }
 
 /// The text of a value of `ty` that holds nothing to read, if `ty` is such a type: unit, a function, an error.
 let private constantText (ty: Ty) : string option =
@@ -215,6 +219,21 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
     let showElement (elementTy: Ty) (element: Var) (k: InterpolationPart list -> Expr) =
         show elementTy (AVar element) (fun part -> k [ part ])
 
+    /// `body`, a printer's, or else `spent` once the budget is spent (see `PrinterTools.Budgeted`), so that a printer
+    /// that keeps to a budget stops going into its value, not only writing it.
+    let unlessSpent (spent: Expr) (body: Expr) =
+        if not tools.Budgeted then body
+        else
+            let isSpent = tools.NewTemp IrBool
+            Expr.letIn isSpent (Expr.make (CallRuntime(Helpers.showSpent, [], true)) IrBool) (Expr.make (If(AVar isSpent, spent, body)) IrString)
+
+    /// `body`, the text of a value with no parts, taken from the budget once written (see `PrinterTools.Budgeted`).
+    let takenFromBudget (body: Expr) =
+        if not tools.Budgeted then body
+        else
+            let written = local "__dbg_written" IrString
+            Expr.letIn written body (Expr.doThen (Expr.make (CallRuntime(Helpers.showTake, [ AVar written ], false)) IrUnit) (Expr.make (Atom(AVar written)) IrString))
+
     // A printer is specialised at the type it prints, as a generic function is at its type arguments, and so is not
     // exported.
     let make (parameters: Var list) (body: Expr) =
@@ -254,10 +273,12 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
                     Expr.make (Call(name, [ AVar tail; AVar longer ])) IrString))
         make
             [ list; written ]
-            (matching list
-                [ { Patterns = [ PList([], None) ]; Body = Expr.make (Atom(AVar written)) IrString }
-                  { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = next } ]
-                IrString)
+            (unlessSpent
+                (text [ Hole(written, HoleString); Text ", …" ])
+                (matching list
+                    [ { Patterns = [ PList([], None) ]; Body = Expr.make (Atom(AVar written)) IrString }
+                      { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = next } ]
+                    IrString))
     | Showing ty ->
         let value = tools.NewVar "__dbg_value" Param (tools.ToIrType ty)
         // The entries or elements of `value`, a map or a set, in a local, as the list the prelude's `toList` gives.
@@ -273,16 +294,16 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
             | RecursiveNominals.Nominal(nominal, _, shape, _) -> wrapped nominal.Name shape (AVar value)
             | _ ->
             match Unifier.unalias ty with
-            | TyPrimitive "int" -> text [ Hole(value, HoleInt) ]
-            | SizedIntegerType integer -> text [ Hole(value, HoleSized integer) ]
-            | TyPrimitive "bool" -> text [ Hole(value, HoleBool) ]
-            | TyPrimitive "float" -> Expr.make (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
-            | TyPrimitive "F32" -> Expr.make (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
-            | TyPrimitive "string" -> Expr.make (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
+            | TyPrimitive "int" -> takenFromBudget (text [ Hole(value, HoleInt) ])
+            | SizedIntegerType integer -> takenFromBudget (text [ Hole(value, HoleSized integer) ])
+            | TyPrimitive "bool" -> takenFromBudget (text [ Hole(value, HoleBool) ])
+            | TyPrimitive "float" -> takenFromBudget (Expr.make (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString)
+            | TyPrimitive "F32" -> takenFromBudget (Expr.make (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString)
+            | TyPrimitive "string" -> takenFromBudget (Expr.make (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString)
             // A char is written as a string literal of it.
             | Chars.CharType ->
                 let text = tools.NewTemp IrString
-                Expr.letIn text (Expr.make (CallRuntime(Helpers.charToString, [ AVar value ], true)) IrString) (Expr.make (CallRuntime(Helpers.stringQuote, [ AVar text ], true)) IrString)
+                takenFromBudget (Expr.letIn text (Expr.make (CallRuntime(Helpers.charToString, [ AVar value ], true)) IrString) (Expr.make (CallRuntime(Helpers.stringQuote, [ AVar text ], true)) IrString))
             | TyTag _
             | TyUnion _ as union ->
                 let arm (tagName: string, payload: Ty option) =
@@ -322,4 +343,4 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
             // `Time(500000000)`, and `(Length / Time)(1.0)` for a derived dimension.
             | TyMeasure(dimension, storage) -> wrapped (Dimension.applied dimension) storage (AVar value)
             | other -> cannot $"`dbg` of a value of type '{Unifier.typeText Map.empty other}'"
-        make [ value ] body
+        make [ value ] (unlessSpent (Expr.make (Atom(AString "…")) IrString) body)
