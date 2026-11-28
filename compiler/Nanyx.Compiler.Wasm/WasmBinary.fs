@@ -796,12 +796,13 @@ type private CodeWriter
             labels.Push label
 
 /// The number a probe's kind has in the table of places, after its stretches: 1 for a function's entry, 2 for a
-/// statement and 3 for a function's return (see `CoreIrProbes`).
+/// statement, 3 for a function's return and 4 for a call that never returns (see `CoreIrProbes`).
 let private probeKindCode (kind: string) =
     match kind with
     | "entry" -> 1
     | "statement" -> 2
     | "return" -> 3
+    | "crashing" -> 4
     | _ -> fail $"a probe of an unknown kind, {kind}"
 
 /// Writes a section: its id, its size and its contents.

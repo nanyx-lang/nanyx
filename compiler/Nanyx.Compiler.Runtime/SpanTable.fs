@@ -67,6 +67,8 @@ type ProbeKind =
     | Statement
     /// A function's end.
     | Return
+    /// Just before a call that never returns, such as `crash`'s, where the runtime always asks for the locals.
+    | Crashing
 
 /// A debug build's probe: the number the program calls the runtime with, where it is, and its place.
 type Probe =
@@ -172,7 +174,9 @@ module SpanTable =
                             match kind with
                             | 1 -> Entry strings.[functionName - 1]
                             | 2 -> Statement
-                            | _ -> Return
+                            | 3 -> Return
+                            | 4 -> Crashing
+                            | other -> failwith $"The table of places has a probe of an unknown kind, {other}"
                         probes.[id] <- { Id = id; Kind = kind; Place = (if place = 0 then [] else frames.[place - 1]) }
                 let definitions = Collections.Generic.Dictionary<string, string * int>()
                 if at < finish then

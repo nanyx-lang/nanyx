@@ -252,6 +252,17 @@ let ``A crash stops the program at the frame that crashed, with its message, and
     Assert.StartsWith("1\n", client.Output.ToString())
 
 [<Fact>]
+let ``A crash shows the crashing frame's locals as they were at the call that crashed, though it never stopped there`` () =
+    use client = session "def inner = { n: int ->\n  def limit = 2\n  if n > limit then crash(\"too big\") else n\n}\n\nprintln(inner(1))\nprintln(inner(5))\n"
+    client.Launch [] |> ignore
+    Assert.Equal(("exception", Some "too big"), client.Stopped())
+    Assert.Equal<string list>([ "crash"; "inner"; "<top level>" ], client.Stack() |> List.map fst)
+    // `inner` is the second frame, and the program ran freely to the crash: the locals are the crash probe's.
+    Assert.Equal(("Locals at line 3", [ "limit", "2"; "n", "5" ]), client.Locals 2)
+    client.Resume "continue"
+    Assert.Equal(1, client.Exited())
+
+[<Fact>]
 let ``--debug with --profile, a memory check or --dbg-to is a usage error, and the program doesn't run`` () =
     use directory = new TempDirectory()
     directory.Write "main.nyx" "println(\"ran\")\n"
