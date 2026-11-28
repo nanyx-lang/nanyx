@@ -408,7 +408,8 @@ nanyx pack --out dist ../util
 ```
 
 A `.nyxpkg` is a zip of the package's manifest, its source files and its `api.json`, which records what each module it
-exports with `export module` exports, with its type, so that the next version can be compared with it. The same files
+exports with `export module` exports, with its type, and each nominal type's parameters' variances, which its
+definition decides however it is written, so that the next version can be compared with it. The same files
 pack to the same bytes on every machine: each file is written as UTF-8 with LF line endings and no byte-order mark,
 whatever the checkout gives it, so a Windows checkout with CRLF line endings packs as a Linux one does, and a file that
 isn't UTF-8 is an error (`NYX0049`). A package that doesn't compile can't be packed. A package with a dependency found by its path, or on GitHub, can't be packed, since that dependency isn't there
