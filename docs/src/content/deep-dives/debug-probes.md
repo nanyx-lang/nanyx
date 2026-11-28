@@ -85,7 +85,10 @@ grow. The server is its listener. It keeps the shadow stack and decides at each 
   statement probe (`SpanTable.statementLines`).
 - **Steps** are measured by the shadow stack's depth. A step in stops at the next statement. A step over stops at the
   next statement at the same depth or shallower, and a step out at the next one shallower. A pause stops at the next
-  statement, or the next function's entry, since a loop that calls itself may have no statement.
+  statement, or the next function's entry, since a loop that calls itself may have no statement. The client's request
+  only sets a flag, which the program's thread takes into the session at its next probe: the session is shared under a
+  lock that a running loop takes at every probe, and a lock isn't fair, so a request that waited for it could wait as
+  long as the loop runs.
 - **The place it stopped at** isn't stopped at again until another probe has passed, so that resuming at a breakpoint
   goes on.
 
