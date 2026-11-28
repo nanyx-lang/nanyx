@@ -1348,7 +1348,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           if facts.UsesShownValues && (options.Probes || options.DbgToEmbedder) then
               $"""  (import "{CoreIrEmitImports.probeModule}" "value" (func ${CoreIrEmitImports.valueImport} (param i32 i32 i32 i32) (result i32)))""" ]
         |> String.concat "\n"
-    let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmitImports.probing} (mut i32) (i32.const 0))" else ""
+    let probeGlobal =
+        [ if facts.UsesProbes then $"  (global ${CoreIrEmitImports.probing} (mut i32) (i32.const 0))"
+          // What a debug build's printers may still write, no limit but while a probe writes a local (see `CoreIrLowerDbg`).
+          if usedHelperSet.Contains Helpers.showSpent then $"  (global ${Helpers.showBudget} (mut i32) (i32.const -1))" ]
+        |> String.concat "\n"
 
     let allImports =
         [ if not (String.IsNullOrWhiteSpace foreignImports) then foreignImports

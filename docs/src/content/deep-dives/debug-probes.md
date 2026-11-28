@@ -50,14 +50,25 @@ inlined through.
 The emitter writes a probe as a check of whether the runtime is probing: the start function sets a global,
 `$__nanyx_probing`, from the runtime's `nanyx:debug` `enabled` before anything else runs, and each function with probes
 copies it into a local when it starts, which can stay in a register. When it is set, the probe calls `nanyx:debug` `probe` with its
-number; if that gives 1, it writes each of its locals that is still alive there through its printer, and passes the
+number; if that gives 1 or 2, it writes each of its locals that is still alive there through its printer, and passes the
 local's name and text to `nanyx:debug` `local`, and then calls `nanyx:debug` `written`, so that the runtime knows they
-are all written and the statement hasn't run: where the debugger stops. A local is still alive where the rest of the code reads it and doesn't
+are all written and the statement hasn't run: where the debugger stops. 1 asks for each local within a budget, 2 for it
+in full (`LocalsWanted`): before each local the probe sets the global `$__nanyx_show_budget` to 256 characters, or to
+-1, no limit, and once they are written it sets it back to what it was. A local is still alive where the rest of the code reads it and doesn't
 bind it again (`CoreIrEmitReads.ChainReads`, worked out once for each chain): one never read again may have been given up
 already. A probe that a printer
 takes its argument over from first gives it a reference of its own.
 
 A crashing probe writes its locals whatever the rest of the code reads, since it reads them itself.
+
+In a build with probes, the printers keep to that budget (`PrinterTools.Budgeted`): each first checks whether it is
+spent (`__nanyx_show_spent`), and writes `…` if it is, so that it stops going into the value, not only writing it; one
+of a value with no parts, a number, a string or a char, takes its text's length from it (`__nanyx_show_take`); and the
+rest of a list ends in `, …` once it is spent. The global is -1 but while a probe writes, so `dbg` and `assert`, which
+share the printers, write in full; a printer runs no code of the program's and passes no probe, so a `dbg` can never
+run while a probe writes. A printer that ran the program's code, such as a type's own `toString`, would save the
+budget before that call and restore it after, as a probe does. A build without probes has printers without the checks, and its code is the same as before
+there was a budget. With them, a module that `dbg`s a list and a record is 21% larger, and does 0.18% more work.
 
 Before the probe's code go the marker of its place and its own, `;;@probe 3 statement` or `;;@probe 1 entry count`.
 `WasmBinary` writes each probe into the table of places, `nanyx.spans`, by its number: its kind, its function's name for
@@ -89,14 +100,17 @@ grow. The server is its listener. It keeps the shadow stack and decides at each 
 - **The place it stopped at** isn't stopped at again until another probe has passed, so that resuming at a breakpoint
   goes on.
 
-To stop, the probe answers 1, the program writes the frame's locals, and its `written` blocks the program's thread
-until the client resumes it. The server keeps each frame's locals by its depth, dropping a depth's when a frame is
-entered or left there, so a frame further out has the locals of the last time it stopped in it. A crashing probe always
-asks, without stopping, and keeps what it writes as its frame's: it runs once, on the way into a crash, so a run that
-doesn't crash never pays for it. The crash then shows the frame that called the function that never returns with those
-locals, **Locals at line N**. It doesn't ask
-anywhere else: asking at every statement printed 286 million characters for a recursion over a list of 5,000, against
-none ([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crash's `report` stops it with reason `exception`.
+To stop, the probe answers for the locals in full, the program writes the frame's locals, and its `written` blocks the
+program's thread until the client resumes it. At every other statement it asks for them within the budget, and keeps
+them without stopping. The server keeps each frame's locals by its depth, dropping a depth's when a frame is entered or
+left there, so a frame further out has its locals as of its last statement, the call it is in, each cut short at 256
+characters. The budget is what makes asking at every statement affordable: a recursion over a list of 5,000, whose
+locals at each call include the rest of the list, wrote 74.5 million characters in 1,934 ms asking for them in full at
+each statement, and writes 2 million in 303 ms within the budget, against 421 ms asking for none
+([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crashing probe always asks for them in full, without
+stopping, and keeps what it writes as its frame's: it runs once, on the way into a crash, so a run that doesn't crash
+never pays for it. The crash then shows the frame that called the function that never returns with those locals,
+**Locals at line N**. A crash's `report` stops it with reason `exception`.
 The Variables view gets each local's text read back into a tree (`ValueTree`), whose parts are references the client
 expands, numbered afresh at each stop.
 
@@ -138,9 +152,8 @@ module's size and the fastest of 21 runs:
 
 Reading the global at each probe rather than a local cost about twice as much (+42% for the loop, +57% for the lists).
 
-Reading every frame's locals at every statement costs little more than listening: it is the call to the runtime at each
-probe that costs, so a debugger listens only while it is stepping or has a breakpoint, and asks for locals where it
-stops.
+Reading every frame's locals at every statement costs little more than listening, with each written within the budget:
+it is the call to the runtime at each probe that costs.
 
 The design call, how a frame's locals stay reachable: they are written by the program when the runtime asks, at the
 probe, rather than spilled to a shadow frame in linear memory at each probe. Spilling would cost stores at every probe
