@@ -40,7 +40,7 @@ When you create a new project with `nanyx new`, the default linter is already co
 
 # Configuring linters
 
-Linters are declared in the `linters` list of the package manifest (the `.nyxp` file, see [Packages and projects](../tour/packages)). Each entry names a linter's package and version, and its `settings` can configure its individual rules. The default linter is the package `nanyx.lint`:
+Linters are declared in the `linters` list of the package manifest (the `.nyxp` file, see [Packages and projects](../tour/packages)). Each entry names a linter's package and version, or the directory it is in (see [Writing a linter](#writing-a-linter)), and its `settings` can configure its individual rules. The default linter is the package `nanyx.lint`:
 
 ```nanyx fragment
 (
@@ -73,7 +73,7 @@ println("Hello!")
 
 `nanyx run` shows only errors and warnings before it runs the program. Info and hint diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
 
-The severities are `#error`, `#warning`, `#info` and `#hint`, in a manifest and in a directive alike. A linter or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `#off`:
+The severities are `#error`, `#warning`, `#info` and `#hint`, in a manifest and in a directive alike. A rule the linter does not declare is an error in the manifest, which names the rules it has, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `#off`:
 
 ```nanyx fragment
 settings = (rules = (shadowedPreludeNames = #off))
@@ -83,11 +83,70 @@ A linter's diagnostics have codes made of the linter's name and the rule's, `def
 
 Because severity is configured per project, a team that wants strictness can promote a linter rule to `#error`, which then blocks a release build exactly as a compiler error would. This is how "warnings as errors" works in Nanyx: it is a project choice, not a compiler setting.
 
-# Writing custom linters
+# Writing a linter
 
-Writing your own linter is not possible yet. Today the default linter is the only one, and it is built into the compiler.
+A linter is a Nanyx package. Its manifest declares that it is a linter, with the module that exports its `lint`, its name, and its rules, and it depends on `nanyx.analysis`, the package every linter is written against, at the compiler's version:
 
-Linters written in Nanyx are planned. Such a linter is a package, added to a project's `linters` list like the default one. It asks the compiler about your code (the type of an expression, what a name refers to, where a definition is used) and returns diagnostics. Its contract is still being designed: see [Linters: the contract](../work-in-progress/linters#the-contract).
+```nanyx fragment
+(
+  package = (
+    name = "acme.lint"
+    version = "1.0.0"
+    sources = ["src/**/*.nyx"]
+    linter = (
+      root = "acme.lint"
+      name = "acme"
+      rules = [
+        (
+          id = "shortNames"
+          title = "Short name"
+          severity = #warning
+          description = "A top-level definition whose name is shorter than three letters."
+        )
+      ]
+    )
+  )
+  dependencies = [(package = "nanyx.analysis", version = "0.54.0")]
+)
+```
+
+Name the package for what it checks, with `.lint` at the end, as `acme.lint`. Its `name` is the first part of its rules' codes, so the rule above reports as `acme/shortNames`, and `@allow(acme/shortNames)` suppresses it. Each rule has an `id`, in camelCase, a `title`, which heads each diagnostic it reports, a default `severity`, and a `description`; `unnecessary = true` says that what it reports is code that does nothing, which the editor draws faded. Because the rules are in the manifest, the compiler checks a project's `settings` and `@allow` against them without running the linter.
+
+The root module exports `lint`, a function from one module to the reports about it. The module is its syntax tree, as written, from `nanyx.analysis`'s [`syntax`](../stdlib/syntax) module; what only type checking knows, such as the type of an expression or what a name refers to, it asks the [`Analysis`](../stdlib/analysis) context:
+
+```nanyx fragment
+export module acme.lint
+
+import (
+  nanyx.analysis/analysis as (Analysis, Report)
+  nanyx.analysis/syntax as (Module, TopLevelItem)
+)
+
+def check: TopLevelItem -> list(Report) = { item ->
+  match item.kind
+    | #def(d) ->
+      if string.length(d.name) < 3 then
+        [(rule = "shortNames", span = item.span, message = "'{d.name}' is short", subject = #some(d.name), related = [], fixes = [])]
+      else
+        []
+    | _ -> []
+}
+
+export def lint: [Analysis] Module -> list(Report) = { m -> list.flatMap(m, check) }
+```
+
+A report names its rule by its `id`. It doesn't choose a severity: the compiler gives it the one the project configures, or the rule's default. A linter that crashes, takes too long, or reports a rule it doesn't declare is one `acme/linterFailed` warning for the module, and the module still compiles.
+
+A project runs the linter by naming it in its `linters`, by its directory while you work on it, or by its version once it is published, and configures its rules as it does the default linter's:
+
+```nanyx fragment
+linters = [
+  (package = "nanyx.lint", version = "0.54.0")
+  (package = "acme.lint", path = "../acme.lint", settings = (rules = (shortNames = #error)))
+]
+```
+
+`nanyx check`, `build`, `run`, `test` and the editor all run it. The compiler builds the linter once, and keeps the build in the package cache until the linter's files or the compiler change, so typing in the editor doesn't build it again. A linter written against another version of `nanyx.analysis` than the compiler's can't run, and is an error at its entry. A script's `::linter` can name only the default linter for now. How a linter package is built and run is on [Lint builds](../deep-dives/lint-builds), and what is still to come on [Linters: compiler design](../work-in-progress/linters).
 
 # Why separate linters from the compiler?
 

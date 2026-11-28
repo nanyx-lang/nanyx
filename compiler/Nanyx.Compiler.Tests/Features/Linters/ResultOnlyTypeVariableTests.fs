@@ -12,7 +12,7 @@ let private decode = "context Decode(a) = (decode: string -> a)\n\n"
 /// with the text it is reported at.
 let private reported (source: string) =
     let source = normalized source
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = code)

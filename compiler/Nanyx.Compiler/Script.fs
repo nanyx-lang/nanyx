@@ -12,6 +12,9 @@ type ScriptDirectives =
       /// manifest's `linters` would. None when there is no `::linter` directive: then no linter runs, as for a package
       /// whose manifest has no `linters`.
       Linters: LinterOptions option
+      /// The linter packages the `::linter` directives name, read: a shipped linter's seeded copy (see
+      /// `Script.linterOptions`).
+      LinterPackages: LinterPackage list
       /// The build the `::host` and `::install` directives make: the host the script runs under and the packages it
       /// imports from (see `Package.scriptModules`). None when there are neither, or they are wrong: then the script
       /// runs under the console host and imports only the standard library and files.
@@ -214,10 +217,11 @@ module Script =
 
     /// The linter options the `::linter` and `::lint` directives of `settings` make, as the manifest's `linters` their
     /// entries stand for would, with what is wrong with them; none when there is no `::linter`.
-    let private linters (settings: (Directive * DirectiveSetting) list) : LinterOptions option * Diagnostic list =
+    /// The linter packages they name are read from `store`: a shipped linter's seeded copy.
+    let private linters (store: PackageStore) (settings: (Directive * DirectiveSetting) list) : LinterOptions option * LinterPackage list * Diagnostic list =
         let linters = settings |> List.choose (function directive, LinterSetting(package, place) -> Some(directive, package, place) | _ -> None)
         match linters with
-        | [] -> None, []
+        | [] -> None, [], []
         | (first, _, _) :: _ ->
             let entry (directive: Directive, package: DirectiveWord, place) =
                 let rules =
@@ -231,8 +235,9 @@ module Script =
                     | [] -> []
                     | _ -> [ { Name = "settings"; NameSpan = directive.Span; Value = record [ { Name = "rules"; NameSpan = directive.Span; Value = record rules } ] } ]
                 entryOf directive.Span package place settingsField
-            let options, errors = Manifest.linterEntries { Data = DataList(linters |> List.map entry); Location = first.Span }
-            Some options, errors
+            let options, entries, errors = Manifest.linterEntries { Data = DataList(linters |> List.map entry); Location = first.Span }
+            let packages, packageErrors = if errors.IsEmpty then Package.scriptLinters store first.Span entries else [], []
+            Some options, packages, errors @ packageErrors
 
     /// The newest version of each package that a new resolution could choose, as an index last gave it, and when.
     let private newestFound = Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * SemanticVersion option>()
@@ -356,19 +361,21 @@ module Script =
             | "" -> None
             | _ when not (Directory.Exists(Path.GetDirectoryName filePath)) -> None
             | _ -> Manifest.tryFind (Path.GetDirectoryName filePath) |> Result.defaultValue None
+        let none = { Linters = None; LinterPackages = []; Build = None; Diagnostics = [] }
         match manifest with
-        | Some _ when directives.IsEmpty -> { Linters = None; Build = None; Diagnostics = [] }
-        | Some manifest -> { Linters = None; Build = None; Diagnostics = Package.directiveErrors manifest filePath source }
-        | None when directives.IsEmpty && defaultHost = Hosts.consolePackage -> { Linters = None; Build = None; Diagnostics = [] }
+        | Some _ when directives.IsEmpty -> none
+        | Some manifest -> { none with Diagnostics = Package.directiveErrors manifest filePath source }
+        | None when directives.IsEmpty && defaultHost = Hosts.consolePackage -> none
         | None ->
             let results = settings directives
             let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
-            let linters, linterErrors = linters read
+            let linters, linterPackages, linterErrors = linters store read
             let build, buildErrors =
                 match build defaultHost store newest filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
             { Linters = linters
+              LinterPackages = linterPackages
               Build = build
               Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
 
@@ -454,14 +461,29 @@ module Script =
         | Some build -> Compiler.compileSourceInReporting listener readFile build options (Path.GetFullPath filePath) source
         | None -> Package.compileSourceReading store listener readFile options filePath source
 
+    /// The linter options `directives` give: the linters they turn on, with those `make` makes from the linter packages
+    /// they name (see `Package.linterOptions`); no linters when they turn none on.
+    let linterOptions (make: LinterPackage -> Result<Linter, string>) (directives: ScriptDirectives) : LinterOptions =
+        match directives.Linters with
+        | Some options -> Package.linterOptions make options directives.LinterPackages
+        | None -> Linters.none
+
+    /// Makes no linter from a linter package, as a compile that can't run one, in the compiler's core, does: a linter the
+    /// compiler has built in runs its own rules alone.
+    let private noLinterPackages (_: LinterPackage) : Result<Linter, string> = Result.Error "linter packages can't be run here"
+
     /// Compiles `source` as the script at `filePath`, with the linters its directives turn on (none if they turn none
-    /// on), under the host and with the dependencies they name, as `nanyx run` does. A source file of a package is
-    /// compiled as one (see `Package.compileSourceWith`). The packages its directives name are found in `store`, and
-    /// each module's check is reported to `listener`.
-    let compileSourceReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
+    /// on), the linters of the linter packages they name made by `make`, under the host and with the dependencies they
+    /// name, as `nanyx run` does. A source file of a package is compiled as one (see `Package.compileSourceWith`). The
+    /// packages its directives name are found in `store`, and each module's check is reported to `listener`.
+    let compileSourceMakingIn (make: LinterPackage -> Result<Linter, string>) (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
         let directives = readFrom store filePath source
-        compileSourceReading store listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        compileSourceReading store listener File.ReadAllText directives (linterOptions make directives) filePath source
         |> withDirectives directives
+
+    /// `compileSourceMakingIn`, running no linter package but as a linter the compiler has built in.
+    let compileSourceReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
+        compileSourceMakingIn noLinterPackages store listener filePath source
 
     /// `compileSourceReportingIn`, telling nobody.
     let compileSourceIn (store: PackageStore) (filePath: string) (source: string) : CompileResult =
@@ -472,21 +494,25 @@ module Script =
     /// program, under the playground host.
     let compileUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : CompileResult =
         let directives = readFromUnder defaultHost store filePath source
-        compileSourceReading store CompileListener.none File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        compileSourceReading store CompileListener.none File.ReadAllText directives (linterOptions noLinterPackages directives) filePath source
         |> withDirectives directives
 
-    /// `compileSourceReportingIn` for the file at `filePath` as it is on disk.
-    let compileFileReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
-        if File.Exists filePath then compileSourceReportingIn store listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
+    /// `compileSourceMakingIn` for the file at `filePath` as it is on disk.
+    let compileFileMakingIn (make: LinterPackage -> Result<Linter, string>) (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
+        if File.Exists filePath then compileSourceMakingIn make store listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
 
-    /// `compileFileReportingIn`, with the host the script runs under made what `rehost` makes of it: as
+    /// `compileFileMakingIn`, running no linter package but as a linter the compiler has built in.
+    let compileFileReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
+        compileFileMakingIn noLinterPackages store listener filePath
+
+    /// `compileFileMakingIn`, with the host the script runs under made what `rehost` makes of it: as
     /// `nanyx run --files-in-memory` builds it under its host's `Host.InMemory`.
-    let compileFileRehostedReportingIn (rehost: Host -> Host) (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
+    let compileFileRehostedMakingIn (rehost: Host -> Host) (make: LinterPackage -> Result<Linter, string>) (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
         if File.Exists filePath then
             let source = File.ReadAllText filePath
             let directives = readFrom store filePath source
             let directives = { directives with Build = directives.Build |> Option.map (fun build -> { build with Host = build.Host |> Option.map rehost }) }
-            compileSourceReading store listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+            compileSourceReading store listener File.ReadAllText directives (linterOptions make directives) filePath source
             |> withDirectives directives
         else Compiler.compileFile filePath
 
@@ -519,7 +545,7 @@ module Script =
                 { own with
                     TestRoot = Some root
                     TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) testHost.Host testHost.HostPackage }
-            let options = directives.Linters |> Option.defaultValue Linters.none
+            let options = linterOptions noLinterPackages directives
             let script = Compiler.compileSourceInReporting listener File.ReadAllText build options filePath source |> withDirectives directives
             let own (tests: Test list) = tests |> List.filter (fun test -> PackageModules.samePath test.Span.File filePath)
             match script.Typed |> Option.map (_.Tests >> own) with

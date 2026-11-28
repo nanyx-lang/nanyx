@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.Linters.UndefinedPayloadArm
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // An arm for a tag whose payload is `undefined`, which no value has, checks, and is drawn faint with a fix that removes
 // it (#3129).
@@ -10,7 +11,7 @@ open NyxCompiler
 /// it is reported at, and the text its fix gives. The module must type-check, or no linter would run.
 let private reported (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = "default/undefinedPayloadArm")

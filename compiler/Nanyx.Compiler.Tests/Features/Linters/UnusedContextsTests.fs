@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 /// no linter would run.
 let private unusedContexts (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedContexts")
 

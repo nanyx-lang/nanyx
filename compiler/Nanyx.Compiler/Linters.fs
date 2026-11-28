@@ -1239,6 +1239,15 @@ module Linters =
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]
 
+    /// The ids of the official linter's rules that its package, `nanyx.lint`, implements, which the compiler's own rules
+    /// leave to it. The rules move to the package a group at a time; the compiler runs the rest beside it.
+    let packageRules : Set<string> = Set.empty
+
+    /// The linter `builtIn`, one of `all`, run as its package's linter `made` runs it: the package's reports, and the
+    /// compiler's own for each rule the package doesn't implement yet (see `packageRules`).
+    let withPackage (made: Linter) (builtIn: Linter) : Linter =
+        { builtIn with Lint = fun model -> (builtIn.Lint model |> List.filter (fun report -> not (packageRules.Contains report.Rule))) @ made.Lint model }
+
     /// No linters: what runs where nothing turns any on. Linters are opt-in, like a package's dependencies.
     let none = { Linters = []; Severities = Map.empty }
 
@@ -1312,7 +1321,7 @@ module Linters =
                     allow.Rules
                     |> List.filter (fun rule -> not (diagnostics |> List.exists (Allows.suppresses allow rule)))
                     |> List.choose (fun ((_, _, span) as rule) ->
-                        diagnostic options official Allows.rule (Some span) (Allows.message all rule) [] (Allows.fixes model allow)))
+                        diagnostic options official Allows.rule (Some span) (Allows.message (options.Linters @ all |> List.distinctBy _.Name) rule) [] (Allows.fixes model allow)))
         (diagnostics |> List.filter (suppressed >> not)) @ unused
 
     /// The diagnostics of every linter `options` names over `model`, at their configured severities, in the order

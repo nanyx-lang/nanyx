@@ -56,6 +56,23 @@ type HostEntry =
       /// The settings its `settings` gives the host, which must be ones the host takes (see `Host.Settings`).
       Settings: DataField list }
 
+/// A linter package an entry of a manifest's `linters` names: one from the package index, at a version,
+/// `(package = "acme.lint", version = "1.0.0")`, or one found by its path, `(package = "acme.lint", path = "../lint")`.
+/// A linter the compiler has built in (see `Linters.all`) is both: its own rules, in `LinterOptions`, and the shipped
+/// package its rules are moving to, at the compiler's version, which runs beside them (see `Package.linterOptions`).
+type LinterEntry =
+    { /// The linter's package.
+      Package: string
+      /// The full path of the linter package's directory, for one found by its `path`; none for one from the index.
+      Path: string option
+      /// The versions of the linter the entry accepts, for one from the index: those compatible with it, as a
+      /// dependency's are; none for one found by its `path`.
+      Version: VersionRequirement option
+      /// Where the entry is written, which an error about the linter it names is reported at.
+      Span: SourceSpan
+      /// Its `settings`, checked against the rules the linter declares once it is read (see `Manifest.linterSettings`).
+      Settings: DataValue option }
+
 /// A package's `.nyxp` manifest, as far as it is read so far: what the package is called, which files are its
 /// sources, what it depends on, which linters check it, and which host runs its `@entry`. Which of its modules other
 /// packages may import its files say, with `export module` (see `PackageModules`). Its `formatter` field is the formatter's, which reads it itself.
@@ -85,12 +102,18 @@ type Manifest =
       Dependencies: Dependency list
       /// The files from GitHub it depends on, each a module of the package, in the order `dependencies` lists them.
       Files: FileReference list
-      /// The linters the manifest's `linters` turns on, and the severities their `settings` set.
+      /// The linters built into the compiler that the manifest's `linters` turns on, and the severities their
+      /// `settings` set.
       Linters: LinterOptions
+      /// The linter packages the manifest's `linters` names, in the order it lists them, which a build reads (see
+      /// `Package.LinterPackages`).
+      LinterPackages: LinterEntry list
       /// The host `host` names, if the manifest has one: a package with none is a library, which has no `@entry`.
       Host: HostEntry option
       /// The host this package is, if its `package` declares one (see `HostPackages`).
       Declares: Host option
+      /// The linter this package is, if its `package` declares one (see `LinterPackages`).
+      DeclaresLinter: LinterDeclaration option
       /// Whether its `package` declares it a host library, whose modules may require `HostRuntime` (see
       /// `HostLibraries.field`).
       HostLibrary: bool
@@ -105,7 +128,7 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "tests"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field ]
+    let private packageFields = [ "name"; "version"; "sources"; "tests"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field; LinterPackages.field ]
 
     /// Whether `manifest` is a test package's: one that selects test files and no sources, `sources = []` or none at
     /// all, to hold the tests of the packages it depends on. It has no `@entry` and exports nothing, so only a test
@@ -113,7 +136,7 @@ module Manifest =
     let isTestPackage (manifest: Manifest) = manifest.Sources.IsEmpty && not manifest.Tests.IsEmpty
 
     /// The fields of an entry of `linters`.
-    let private entryFields = [ "package"; "version"; "settings" ]
+    let private entryFields = [ "package"; "version"; "path"; "settings" ]
 
     /// The fields of the `host` entry.
     let private hostFields = [ "package"; "version"; "path"; "settings" ]
@@ -255,44 +278,115 @@ module Manifest =
     /// The severities as a manifest writes them: `#error`, `#warning`, ...
     let private severityTags = severities |> List.map (fst >> sprintf "#%s") |> String.concat ", "
 
-    /// The linter options of the manifest's `linters`: one entry per linter to run, whose `settings` give its rules'
-    /// severities, `settings = (rules = (unusedBindings = #error))`.
-    let private readLinters (problems: Problems) (value: DataValue) : LinterOptions =
+    /// The severities `settings`, an entry of `linters`, gives the rules of the linter package `package`, whose codes
+    /// start with `name` and whose rules are `rules`: `settings = (rules = (unusedBindings = #error))`, by code. A rule
+    /// the linter doesn't have is an error that names those it has.
+    let private settingsOf (problems: Problems) (package: string) (name: string) (rules: Rule list) (settings: DataValue) : (string * Severity option) list =
+        let known = rules @ [ Linters.failedRule ] |> List.map _.Id
+        problems.Record $"the settings of '{package}'" [ "rules" ] settings
+        |> Option.bind (DataValue.field "rules")
+        |> Option.bind (fun field -> problems.Record $"the rules of '{package}'" known field.Value)
+        |> Option.defaultValue []
+        |> List.choose (fun rule ->
+            match rule.Value.Data with
+            | _ when not (List.contains rule.Name known) -> None
+            | DataTag(severity, None) when severities |> List.exists (fst >> (=) severity) ->
+                Some($"{name}/{rule.Name}", severities |> List.find (fst >> (=) severity) |> snd)
+            | _ ->
+                problems.Add
+                    DiagnosticCodes.InvalidManifestValue
+                    rule.Value.Location
+                    $"the rule {rule.Name} must be {severityTags}, not {DataValue.describe rule.Value}"
+                None)
+
+    /// The linter package `name` the entry `value` of `linters`, whose fields are `fields`, names, if the entry is right:
+    /// one from the index, at a version, or one found by its `path`, relative to `root`, which has no version. Whether it
+    /// is a linter, and whether its `settings` name its rules, is known once it is read (see `Package`).
+    let private readLinterPackage (problems: Problems) (root: string) (name: string) (fields: DataField list) (value: DataValue) : LinterEntry option =
+        let entry path version = { Package = name; Path = path; Version = version; Span = value.Location; Settings = DataValue.field "settings" fields |> Option.map _.Value }
+        match DataValue.field "path" fields, DataValue.field "version" fields with
+        | Some _, Some version ->
+            problems.Add DiagnosticCodes.InvalidManifestValue version.NameSpan $"The linter '{name}' is found by its path, so it has no version: give one or the other"
+            None
+        | Some { DataField.Value = { DataValue.Data = DataString directory } }, None -> Some(entry (Some(Path.GetFullPath(Path.Combine(root, directory)))) None)
+        | Some path, None ->
+            problems.Add DiagnosticCodes.InvalidManifestValue path.Value.Location $"A linter's `path` must be a string, the directory the linter's package is in, not {DataValue.describe path.Value}"
+            None
+        | None, Some _ ->
+            problems.Text "a linter" fields "version" anyText ""
+            |> Option.bind (fun written ->
+                match VersionRequirement.tryParse written with
+                | Some requirement -> Some(entry None (Some requirement))
+                | None ->
+                    problems.Add DiagnosticCodes.InvalidManifestValue (DataValue.field "version" fields).Value.Value.Location $"""a linter's version "{written}" must be {VersionRequirement.rule}"""
+                    None)
+        | None, None ->
+            problems.Add
+                DiagnosticCodes.MissingManifestField
+                value.Location
+                $"The linter '{name}' has no `path` or `version`: give the directory its package is in, `path = \"../lint\"`, or the version to download, `version = \"1.0\"`"
+            None
+
+    /// The linter options of the manifest's `linters`, for the linters the compiler has built in, and the linter packages
+    /// it names, each found relative to `root`: one entry per linter to run, whose `settings` give its rules' severities,
+    /// `settings = (rules = (unusedBindings = #error))`. Without `root` (a script's directives), only the linters the
+    /// compiler has built in can be named.
+    let private readLinters (problems: Problems) (root: string option) (value: DataValue) : LinterOptions * LinterEntry list =
+        let builtIn (name: string) = Linters.all |> List.tryFind (fun linter -> linter.Package = name)
         let linter (name: string) =
-            match Linters.all |> List.tryFind (fun linter -> linter.Package = name) with
+            match builtIn name with
             | Some linter -> Result.Ok linter
             | None -> Result.Error $"There is no linter '{name}': the linters are {quoted (Linters.all |> List.map _.Package)}"
-        let rules (linter: Linter) (settings: DataValue) =
-            let what = $"the settings of '{linter.Package}'"
-            problems.Record what [ "rules" ] settings
-            |> Option.bind (DataValue.field "rules")
-            |> Option.bind (fun field -> problems.Record $"the rules of '{linter.Package}'" (linter.Rules @ [ Linters.failedRule ] |> List.map _.Id) field.Value)
-            |> Option.defaultValue []
-            |> List.choose (fun rule ->
-                match rule.Value.Data with
-                | _ when not (linter.Rules @ [ Linters.failedRule ] |> List.exists (fun known -> known.Id = rule.Name)) -> None
-                | DataTag(name, None) when severities |> List.exists (fst >> (=) name) ->
-                    Some(Linters.code linter rule.Name, severities |> List.find (fst >> (=) name) |> snd)
-                | _ ->
-                    problems.Add
-                        DiagnosticCodes.InvalidManifestValue
-                        rule.Value.Location
-                        $"the rule {rule.Name} must be {severityTags}, not {DataValue.describe rule.Value}"
-                    None)
+        let read (value: DataValue) : Choice<Linter * (string * Severity option) list * LinterEntry option, LinterEntry> option =
+            let packageEntry =
+                match root, value.Data with
+                | Some root, DataRecord fields ->
+                    match DataValue.field "package" fields with
+                    | Some { DataField.Value = { DataValue.Data = DataString name } } when (builtIn name).IsNone -> Some(root, name, fields)
+                    | _ -> None
+                | _ -> None
+            match packageEntry with
+            | Some (root, name, fields) ->
+                problems.Record "a linter" entryFields value |> ignore
+                match problems.Text "a linter" fields "package" namePattern nameRule with
+                | Some _ -> readLinterPackage problems root name fields value |> Option.map Choice2Of2
+                | None -> None
+            | None ->
+                entry problems "a linter" linter value
+                |> Option.map (fun (fields, linter) ->
+                    DataValue.field "path" fields
+                    |> Option.iter (fun path ->
+                        problems.Add DiagnosticCodes.InvalidManifestValue path.NameSpan $"The compiler has '{linter.Package}' built in, so it has no `path`: name it at the compiler's version")
+                    let severities = DataValue.field "settings" fields |> Option.map (fun field -> settingsOf problems linter.Package linter.Name linter.Rules field.Value) |> Option.defaultValue []
+                    // It is a shipped linter package too, which runs beside the rules the compiler has built in (see
+                    // `Package.linterOptions`), at the version the entry names, which is the compiler's.
+                    let package =
+                        match DataValue.field "version" fields with
+                        | Some { DataField.Value = { DataValue.Data = DataString written } } ->
+                            VersionRequirement.tryParse written
+                            |> Option.map (fun requirement ->
+                                { Package = linter.Package
+                                  Path = None
+                                  Version = Some requirement
+                                  Span = value.Location
+                                  Settings = DataValue.field "settings" fields |> Option.map _.Value })
+                        | _ -> None
+                    Choice1Of2(linter, severities, package))
         let chosen =
             match value.Data with
-            | DataList entries ->
-                entries
-                |> List.choose (fun value ->
-                    entry problems "a linter" linter value
-                    |> Option.map (fun (fields, linter) ->
-                        linter, DataValue.field "settings" fields |> Option.map (fun field -> rules linter field.Value) |> Option.defaultValue []))
+            | DataList entries -> entries |> List.choose read
             | _ ->
                 problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"`linters` must be a list of linters, `[(package = ...)]`, not {DataValue.describe value}"
                 []
+        let builtInChosen = chosen |> List.choose (function Choice1Of2(linter, severities, _) -> Some(linter, severities) | Choice2Of2 _ -> None)
+        let packages = chosen |> List.choose (function Choice2Of2 entry -> Some entry | Choice1Of2(_, _, entry) -> entry)
+        problems.Repeats
+            (packages |> List.map (fun entry -> entry.Package, entry.Span))
+            (fun name -> $"The linter '{name}' is listed twice, but a package lists each linter it runs once: remove one")
         // In the order the compiler has them, so diagnostics come out in the same order whatever the manifest's.
-        { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
-          Severities = chosen |> List.collect snd |> Map.ofList }
+        { Linters = Linters.all |> List.filter (fun linter -> builtInChosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
+          Severities = builtInChosen |> List.collect snd |> Map.ofList },
+        packages
 
     /// The host the manifest's `host` names, if the entry is right: a package from the index, at a version, or one found
     /// by its `path`, relative to `root`, which has no version. Whether it is a host is known once it is read (see
@@ -348,6 +442,55 @@ module Manifest =
             | None -> ()
             | Some field ->
                 problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"A host's `settings` must be a record of the settings it takes with their defaults, `(port = 3000)`, not {DataValue.describe field.Value}")
+
+    /// What a linter's name must be, the first part of its rules' codes: `acme` in `acme/noTodo`.
+    let private linterNamePattern = Regex(@"^[a-z][A-Za-z0-9]*$")
+
+    /// What a rule's `id` must be, in camelCase: `noTodo`.
+    let private ruleIdPattern = Regex(@"^[a-z][A-Za-z0-9]*$")
+
+    /// Checks the `linter` field of the manifest's `package`, which declares the package a linter: its root module, its
+    /// name and its rules (see `LinterPackages`).
+    let private checkLinterDeclaration (problems: Problems) (value: DataValue) =
+        let what = "the package's linter"
+        problems.Record what [ LinterPackages.rootField; LinterPackages.nameField; LinterPackages.rulesField ] value
+        |> Option.iter (fun fields ->
+            problems.RequiredText what value.Location fields LinterPackages.rootField anyText "" |> ignore
+            problems.RequiredText what value.Location fields LinterPackages.nameField linterNamePattern "a word in camelCase, the first part of its rules' codes, as `acme`" |> ignore
+            let severityTags = LinterPackages.defaultSeverities |> List.map (fst >> sprintf "#%s") |> String.concat ", "
+            match DataValue.field LinterPackages.rulesField fields with
+            | Some { DataField.Value = { DataValue.Data = DataList rules } } ->
+                let ids =
+                    rules
+                    |> List.choose (fun rule ->
+                        problems.Record "a rule" LinterPackages.ruleFields rule
+                        |> Option.bind (fun ruleFields ->
+                            let id = problems.RequiredText "a rule" rule.Location ruleFields "id" ruleIdPattern "a word in camelCase, as `noTodo`"
+                            problems.RequiredText "a rule" rule.Location ruleFields "title" anyText "" |> ignore
+                            problems.Text "a rule" ruleFields "description" anyText "" |> ignore
+                            match DataValue.field "severity" ruleFields with
+                            | Some { DataField.Value = { DataValue.Data = DataTag(name, None) } } when LinterPackages.defaultSeverities |> List.exists (fst >> (=) name) -> ()
+                            | Some field ->
+                                problems.AddAbout DiagnosticCodes.InvalidManifestValue field.Value.Location "severity" $"A rule's severity must be {severityTags}, not {DataValue.describe field.Value}"
+                            | None -> problems.AddAbout DiagnosticCodes.MissingManifestField rule.Location "severity" "A rule has no severity, which it needs"
+                            match DataValue.field "unnecessary" ruleFields with
+                            | Some { DataField.Value = { DataValue.Data = DataBool _ } }
+                            | None -> ()
+                            | Some field ->
+                                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"A rule's `unnecessary` must be `true` or `false`, not {DataValue.describe field.Value}"
+                            match id with
+                            | Some id when id = Linters.failedRule.Id ->
+                                problems.Add
+                                    DiagnosticCodes.InvalidManifestValue
+                                    (DataValue.field "id" ruleFields).Value.Value.Location
+                                    $"Every linter has the rule '{id}', which the compiler reports when the linter fails: give the rule another id"
+                                None
+                            | Some id -> Some(id, (DataValue.field "id" ruleFields).Value.Value.Location)
+                            | None -> None))
+                problems.Repeats ids (fun id -> $"The rule '{id}' is declared twice, but each of a linter's rules has an id of its own: remove one")
+            | Some field ->
+                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"A linter's `rules` must be a list of its rules, `[(id = ..., title = ..., severity = #warning)]`, not {DataValue.describe field.Value}"
+            | None -> problems.AddAbout DiagnosticCodes.MissingManifestField value.Location LinterPackages.rulesField $"{what} has no rules, which it needs")
 
     /// Checks that the package `name`, whose manifest's `package` is `fields`, is named for a host exactly when it
     /// declares that it is one: a host's name ends in `Hosts.nameSuffix`, and a library's doesn't.
@@ -571,10 +714,17 @@ module Manifest =
 
     /// The linter options `value` sets, written as a manifest's `linters` is, with what is wrong with it, as `check`
     /// reports it: how a script's `::linter` and `::lint` directives are read (see `Script`).
-    let internal linterEntries (value: DataValue) : LinterOptions * Diagnostic list =
+    let internal linterEntries (value: DataValue) : LinterOptions * LinterEntry list * Diagnostic list =
         let problems = Problems()
-        let options = readLinters problems value
-        options, problems.All
+        let options, packages = readLinters problems None value
+        options, packages, problems.All
+
+    /// The severities the `settings` of `entry` give the rules of the linter `linter` declares, by code, with what is
+    /// wrong with them: a rule it doesn't declare is an error that names those it does.
+    let internal linterSettings (entry: LinterEntry) (linter: LinterDeclaration) : (string * Severity option) list * Diagnostic list =
+        let problems = Problems()
+        let severities = entry.Settings |> Option.map (settingsOf problems entry.Package linter.Name linter.Rules) |> Option.defaultValue []
+        severities, problems.All
 
     /// What is wrong with a file that is not one data value, as diagnostics.
     let private dataErrors (errors: DataError list) =
@@ -658,6 +808,7 @@ module Manifest =
                     name |> Option.iter (checkHostName problems fields)
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version, `1.2.0`"
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
+                    DataValue.field LinterPackages.field fields |> Option.iter (fun field -> checkLinterDeclaration problems field.Value)
                     match DataValue.field HostLibraries.field fields with
                     | Some { DataField.Value = { DataValue.Data = DataBool _ } }
                     | None -> ()
@@ -670,7 +821,7 @@ module Manifest =
                     let tests = problems.Strings "package" fields "tests" |> Option.map (List.map fst)
                     name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), tests, repository, nanyx
                 | None -> None, None, None, None, None, None
-            let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
+            let linters = field "linters" |> Option.map (fun field -> readLinters problems (Some(Path.GetDirectoryName path)) field.Value)
             let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
             | [] ->
@@ -688,10 +839,12 @@ module Manifest =
                       Dependencies = dependencies |> Option.map fst |> Option.defaultValue []
                       Files = dependencies |> Option.map snd |> Option.defaultValue []
                       // No `linters` means no linters: a package turns on the official one by naming nanyx.lint.
-                      Linters = defaultArg linters Linters.none
+                      Linters = linters |> Option.map fst |> Option.defaultValue Linters.none
+                      LinterPackages = linters |> Option.map snd |> Option.defaultValue []
                       // No `host` means a library: an application names the host it runs under.
                       Host = host
                       Declares = HostPackages.ofManifest (defaultArg name "") (Path.GetDirectoryName path) manifest
+                      DeclaresLinter = LinterPackages.ofManifest (defaultArg name "") manifest
                       HostLibrary = HostLibraries.declares manifest
                       Value = manifest }
             | problems -> Result.Error problems

@@ -124,7 +124,8 @@ let makingFunction (tools: TypeMatchTools) (functionName: string) (recordType: T
     let values = tools.NewVar "__values" Param (IrList IrBox)
     let recordTy = tools.ToIrType recordType
     let fields = fieldsOf recordType
-    let boxes = fields |> List.map (fun (name, _) -> tools.NewVar (tools.UniqueName $"__{name}") PatternBound IrBox)
+    // Named apart from the parameters, `__env` and `__values`, which a field of either name would otherwise hide.
+    let boxes = fields |> List.map (fun (name, _) -> tools.NewVar (tools.UniqueName $"__field_{name}") PatternBound IrBox)
     let rec unboxAll (remaining: ((string * Ty) * Var) list) (acc: (string * Atom) list) =
         match remaining with
         | [] ->

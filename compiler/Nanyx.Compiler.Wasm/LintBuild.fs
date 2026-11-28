@@ -10,3 +10,9 @@ open Transpiler.Wasm.CodeGen
 let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
     let wat, _ = transpileTypedModuleWithOptions { options with CrashToRuntime = true } typed
     WasmBinary.assemble wat
+
+/// What runs linter packages (see `NyxCompiler.LintBuilds`): lint builds assembled here, on a thread with a large stack,
+/// and loaded by `load`, the runtime's, which this project doesn't reference (`Nanyx.Runtime.WasmLinter.load`).
+let runner (load: byte array -> Result<(byte array -> Result<byte array, string>) -> Result<byte array, string>, string>) : LintRunner =
+    { Assemble = fun typed -> Nanyx.LargeStack.run (fun () -> assemble WasmOptions.Default typed)
+      Load = load }

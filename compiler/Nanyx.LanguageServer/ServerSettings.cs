@@ -37,6 +37,10 @@ namespace Nanyx.LanguageServer;
 /// Whether to show where a document differs from its formatted text, as Hint diagnostics with quick fixes (see
 /// <see cref="Nanyx.LanguageServer.FormattingHints"/>).
 /// </param>
+/// <param name="LintRunner">
+/// What runs the lint builds of the linter packages a document's manifest names, which the server doesn't reference:
+/// <c>nanyx lsp</c> gives the CLI's. When <c>null</c>, only the linters built into the compiler run.
+/// </param>
 public sealed record ServerSettings(
     TypeNotation TypeNotation,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
@@ -49,7 +53,8 @@ public sealed record ServerSettings(
     Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null,
     bool Timings = false,
     bool FormattingHints = true,
-    Func<PackageStore>? Packages = null)
+    Func<PackageStore>? Packages = null,
+    LintRunner? LintRunner = null)
 {
     /// <summary>The packages a script's directives are read against (see <see cref="Packages"/>).</summary>
     public PackageStore PackageStore() => Packages?.Invoke() ?? SeededPackages.user();
@@ -72,13 +77,19 @@ public sealed record ServerSettings(
 
     /// <summary>
     /// The linter options the document at <paramref name="path"/> (<c>null</c> if not on disk) is compiled with, given
-    /// its <paramref name="directives"/> (which give none in a package).
+    /// its <paramref name="directives"/> (which give none in a package). A linter package's lint build is built once, and
+    /// kept, so a keystroke doesn't build it again (see <c>LintBuilds</c>). Without <see cref="LintRunner"/>, only the
+    /// linters built into the compiler run, and a manifest's linter packages aren't read.
     /// </summary>
     public LinterOptions LinterOptionsFor(string? path, ScriptDirectives directives) =>
         Linters
-        ?? directives.Linters?.Value
-        ?? (path is null ? null : PackageModule.lintersFor(path)?.Value)
+        ?? (directives.Linters is null ? null : LintRunner is null ? directives.Linters.Value : Script.linterOptions(MakeLinter(LintRunner), directives))
+        ?? (path is null ? null : LintRunner is null ? PackageModule.builtInLintersFor(path)?.Value : PackageModule.lintersFor(PackageStore(), MakeLinter(LintRunner), path)?.Value)
         ?? NyxCompiler.Linters.none;
+
+    /// <summary>Makes the linter a linter package's lint build runs with <paramref name="runner"/>, or why it can't be.</summary>
+    private Microsoft.FSharp.Core.FSharpFunc<LinterPackage, Microsoft.FSharp.Core.FSharpResult<Linter, string>> MakeLinter(LintRunner runner) =>
+        Microsoft.FSharp.Core.FuncConvert.FromFunc((LinterPackage linter) => LintBuilds.make(PackageStore(), runner, linter));
 }
 
 /// <summary>Where the inferred type of a top-level def that does not write its own is shown.</summary>

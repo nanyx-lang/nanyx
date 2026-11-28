@@ -28,7 +28,23 @@ type Package =
       CheckedFile: string option
       /// In a test build (see `Package.withTests`), the test host its root runs under, with the host's package; none
       /// otherwise.
-      TestHost: (Host * Package) option }
+      TestHost: (Host * Package) option
+      /// The linter packages its manifest's `linters` names, read, for the package a build builds; none for a package
+      /// it depends on, whose linters don't run on it.
+      LinterPackages: LinterPackage list
+      /// The linters a build runs over each of its modules: those built into the compiler its manifest turns on, and
+      /// those `withLinters` makes from `LinterPackages`.
+      Linters: LinterOptions }
+
+/// A linter package a manifest's `linters` names, read: what it declares, its package, and the severities the entry's
+/// `settings` give its rules.
+and LinterPackage =
+    { Entry: LinterEntry
+      Declaration: LinterDeclaration
+      /// The linter's package, with the packages it depends on.
+      Package: Package
+      /// By code, as `LinterOptions.Severities` has them.
+      Severities: Map<string, Severity option> }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -168,10 +184,11 @@ module Package =
     /// it: by `--host`, or as a script's host.
     let private atCompilerVersion = VersionRequirement.at (SemanticVersion.tryParse Toolchain.version |> Option.get)
 
-    /// What a manifest asks for a package from the index as: a dependency, or its host.
+    /// What a manifest asks for a package from the index as: a dependency, its host, or a linter.
     type private Requested =
         | ADependency
         | AHost
+        | ALinter
 
     /// Where a package from the index is read from: the cache, which never changes, so its checked modules can be kept
     /// beside it; or the compiler's own copy of a package it seeded into the cache, whose checked modules it has already
@@ -216,6 +233,10 @@ module Package =
                     error
                         DiagnosticCodes.DependencyNotLocked
                         $"The host '{name}' {requirement} is neither one the compiler ships nor locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `host = (package = \"{name}\", path = \"../{name}\")`"
+                | ALinter ->
+                    error
+                        DiagnosticCodes.DependencyNotLocked
+                        $"The linter '{name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `(package = \"{name}\", path = \"../{name}\")`"
         | Result.Ok _, Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
             error
                 DiagnosticCodes.InvalidManifestValue
@@ -270,7 +291,9 @@ module Package =
                   Host = host |> Option.map fst
                   HostPackage = host |> Option.map snd
                   CheckedFile = None
-                  TestHost = None }
+                  TestHost = None
+                  LinterPackages = []
+                  Linters = manifest.Linters }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
             Result.Error(errorsOf entry @ exports @ testsAmongSources @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
@@ -368,14 +391,65 @@ module Package =
         Lockfile.read (Lockfile.pathIn manifest.Root)
         |> Result.map (fun locked -> { Store = store; Locked = defaultArg locked Lockfile.empty })
 
-    /// The package whose manifest is at `manifestPath`, with the packages it depends on, found in `store` and its
-    /// lockfile, or what is wrong with them.
+    /// The linter package `entry` names, read from its manifest, which must declare it a linter (see `LinterPackages`),
+    /// with the packages it depends on, found through `lookup` as a dependency is but apart from the build's own: one from
+    /// the index, at the version the lockfile locks, or one in the directory the entry gives. Or what is wrong: the
+    /// entry's `settings` name a rule it doesn't declare, or it is written against another `nanyx.analysis` than the
+    /// compiler's, which the compiler can't run.
+    let private linterIn (lookup: Lookup) (entry: LinterEntry) : Result<LinterPackage, Problem list> =
+        let error message = Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue entry.Span message |> Diagnostics.about entry.Package) ]
+        let analysisError (version: string) =
+            error
+                $"The linter '{entry.Package}' is written against {LinterPackages.analysisPackage} {version}, but this compiler runs linters written against {LinterPackages.analysisPackage} {Toolchain.version}: use a version of the linter made for this compiler"
+        let directory =
+            match entry.Path, entry.Version with
+            | Some directory, _ -> Result.Ok directory
+            | None, Some requirement -> locked lookup ALinter entry.Package entry.Span requirement |> Result.map directoryOf
+            | None, None -> error $"The linter '{entry.Package}' has no `version` or `path`"
+        match directory |> Result.map (fun directory -> directory, Manifest.manifestIn directory) with
+        | Result.Error problems -> Result.Error problems
+        | Result.Ok(_, Result.Error message) -> error $"The linter '{entry.Package}' can't be read: {message}"
+        | Result.Ok(directory, Result.Ok path) ->
+            match Manifest.read path with
+            | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
+            | Result.Ok found when found.Name <> entry.Package -> error $"The package in '{directory}' is named '{found.Name}', not '{entry.Package}': make the names match"
+            | Result.Ok found ->
+                let analysis = found.Dependencies |> List.tryFind (fun dependency -> dependency.Name = LinterPackages.analysisPackage)
+                let running = SemanticVersion.tryParse Toolchain.version
+                match found.DeclaresLinter, analysis with
+                | None, _ -> error (LinterPackages.notALinter entry.Package)
+                | Some _, None ->
+                    error $"The linter '{entry.Package}' doesn't depend on {LinterPackages.analysisPackage}, which every linter is written against: add it to its `dependencies`, at {Toolchain.version}"
+                | Some _, Some { Source = FromIndex requirement } when running |> Option.exists (VersionRequirement.accepts requirement >> not) -> analysisError (string requirement)
+                | Some declaration, Some _ ->
+                    match Manifest.linterSettings entry declaration with
+                    | _, (_ :: _ as problems) -> Result.Error(problems |> List.map AtManifest)
+                    | severities, [] ->
+                        let reached = reachedFrom found
+                        match ofManifestIn lookup reached [] found with
+                        | Result.Error problems -> Result.Error problems
+                        | Result.Ok package ->
+                            match package.Dependencies |> List.tryFind (fun dependency -> dependency.Manifest.Name = LinterPackages.analysisPackage) with
+                            | Some analysis when analysis.Manifest.Version <> Toolchain.version -> analysisError analysis.Manifest.Version
+                            | _ -> Result.Ok { Entry = entry; Declaration = declaration; Package = package; Severities = Map.ofList severities }
+
+    /// The linter packages the manifest's `linters` names, each read as `linterIn` reads it, or what is wrong with them.
+    let private lintersIn (lookup: Lookup) (manifest: Manifest) : Result<LinterPackage list, Problem list> =
+        manifest.LinterPackages |> List.map (linterIn lookup) |> all
+
+    /// The package whose manifest is at `manifestPath`, with the packages it depends on and the linter packages its
+    /// manifest names, found in `store` and its lockfile, or what is wrong with them.
     let ofManifestFrom (store: PackageStore) (manifestPath: string) : Result<Package, string list> =
         Manifest.read manifestPath
         |> Result.mapError (List.map Manifest.describe)
         |> Result.bind (fun manifest ->
             lookupFor store manifest
-            |> Result.bind (fun lookup -> ofManifestIn lookup (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe)))
+            |> Result.bind (fun lookup ->
+                match ofManifestIn lookup (reachedFrom manifest) [] manifest, lintersIn lookup manifest with
+                | Result.Ok package, Result.Ok linters -> Result.Ok { package with LinterPackages = linters }
+                | package, linters ->
+                    let errorsOf = function Result.Error problems -> problems | Result.Ok _ -> []
+                    Result.Error(errorsOf package @ errorsOf linters |> List.map describe)))
 
     /// A compile of nothing, with no diagnostics: what the compile of a file that can't be compiled has, with its errors.
     let private notCompiled : CompileResult =
@@ -411,6 +485,7 @@ module Package =
                     @ errorsOf (referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None (sources manifest)).Modules manifest.Files)
                     @ errorsOf (dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies)
                     @ errorsOf (hostIn lookup reached manifest.Host)
+                    @ errorsOf (lintersIn lookup manifest)
                 let dependencyErrors = problems |> List.map (diagnosticOf manifest.Value.Location)
                 exportErrors manifest (sources manifest) @ dependencyErrors
         { notCompiled with Diagnostics = diagnostics }
@@ -420,7 +495,7 @@ module Package =
     /// why it isn't one.
     let withHost (store: PackageStore) (directory: string) (name: string) (package: Package) : Result<Package, string> =
         let full = Path.GetFullPath(name, directory)
-        let entry =
+        let entry : HostEntry =
             if Directory.Exists full then
                 let packageName = match Manifest.manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
                 { Package = packageName; Path = Some full; Version = None; Span = SourceSpan.none; Settings = [] }
@@ -448,13 +523,67 @@ module Package =
         else
             Result.Error [ $"'{path}' is neither a directory nor a {Manifest.extension} manifest" ]
 
-    /// The linter options for a file: those of the package manifest it is under, if it has one that reads.
-    let lintersFor (filePath: string) : LinterOptions option =
+    /// The linter options of `builtIn`, those built into the compiler that a manifest turns on, with the linters `make`
+    /// makes from `linters`, each at the severities its entry's `settings` give. A linter that can't be made fails each
+    /// module it would lint, with why, as a linter that fails does (`Linters.failedRule`), and the compile goes on. The
+    /// package of a linter the compiler has built in runs as that linter, beside its rules (`Linters.withPackage`); where
+    /// it can't be made (the compiler's core, or the browser's, can't run one), its rules run alone.
+    let linterOptions (make: LinterPackage -> Result<Linter, string>) (builtIn: LinterOptions) (linters: LinterPackage list) : LinterOptions =
+        let made (linter: LinterPackage) =
+            match make linter with
+            | Result.Ok made -> made
+            | Result.Error reason ->
+                { Name = linter.Declaration.Name
+                  Package = linter.Entry.Package
+                  Rules = linter.Declaration.Rules
+                  Lint = fun _ -> failwith reason }
+        let withPackages, others =
+            linters
+            |> List.fold
+                (fun (running: Linter list, others: Linter list) linter ->
+                    match running |> List.tryFindIndex (fun known -> known.Package = linter.Entry.Package) with
+                    | Some index ->
+                        match make linter with
+                        | Result.Ok made -> running |> List.updateAt index (Linters.withPackage made running.[index]), others
+                        | Result.Error _ -> running, others
+                    | None -> running, others @ [ made linter ])
+                (builtIn.Linters, [])
+        { Linters = withPackages @ others
+          Severities = linters |> List.fold (fun severities linter -> Map.foldBack Map.add linter.Severities severities) builtIn.Severities }
+
+    /// The linter packages `entries` name, a script's `::linter` directives' (see `Script`), each read as a manifest's
+    /// are, with no lockfile, so that a shipped linter is its seeded copy, from `store`; and what is wrong with them, at
+    /// `span` where a problem is about a package as a whole.
+    let scriptLinters (store: PackageStore) (span: SourceSpan) (entries: LinterEntry list) : LinterPackage list * Diagnostic list =
+        let read = entries |> List.map (linterIn { Store = store; Locked = Lockfile.empty })
+        read |> List.choose Result.toOption,
+        read |> List.collect (function Result.Error problems -> problems |> List.map (diagnosticOf span) | Result.Ok _ -> [])
+
+    /// `package`, whose linter packages are read (see `ofManifestFrom`), with the linters `make` makes from them among
+    /// those its builds run (see `linterOptions`). The compiler's core can't run a linter package, whose lint build runs on
+    /// WebAssembly, so the CLI, which can, makes them (see `LintBuilds`).
+    let withLinters (make: LinterPackage -> Result<Linter, string>) (package: Package) : Package =
+        { package with Linters = linterOptions make package.Manifest.Linters package.LinterPackages }
+
+    /// The linter options for a file: those of the package manifest it is under, if it has one that reads, with the
+    /// linters `make` makes from the linter packages it names, found in `store`. A linter package that can't be read is
+    /// left out: the manifest's own compile reports why (see `compileManifestFrom`).
+    let lintersFor (store: PackageStore) (make: LinterPackage -> Result<Linter, string>) (filePath: string) : LinterOptions option =
         match Manifest.tryFind (Path.GetDirectoryName(Path.GetFullPath filePath)) with
         | Result.Ok (Some manifest) ->
             match Manifest.read manifest with
-            | Result.Ok manifest -> Some manifest.Linters
+            | Result.Ok manifest ->
+                let lookup = lookupFor store manifest |> Result.defaultValue { Store = store; Locked = Lockfile.empty }
+                let linters = manifest.LinterPackages |> List.choose (linterIn lookup >> Result.toOption)
+                Some(linterOptions make manifest.Linters linters)
             | Result.Error _ -> None
+        | _ -> None
+
+    /// The linters built into the compiler that the package manifest a file is under turns on, if it has one that reads,
+    /// with its linter packages left unread: for a compile that can't run them.
+    let builtInLintersFor (filePath: string) : LinterOptions option =
+        match Manifest.tryFind (Path.GetDirectoryName(Path.GetFullPath filePath)) with
+        | Result.Ok (Some manifest) -> Manifest.read manifest |> Result.toOption |> Option.map _.Linters
         | _ -> None
 
     /// An error for each `::` directive at the top of the file at `filePath`, whose text is `source`, which is in the
@@ -562,7 +691,9 @@ module Package =
                       Host = host |> Option.map fst
                       HostPackage = host |> Option.map snd
                       CheckedFile = None
-                      TestHost = None }
+                      TestHost = None
+                      LinterPackages = []
+                      Linters = manifest.Linters }
                 // An editor compiles a test file as a test build does, and a source file with the test files among the
                 // package's, but as its other builds do.
                 let package =
@@ -691,14 +822,14 @@ module Package =
     let compileSourceWith (store: PackageStore) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileSourceReporting store CompileListener.none options filePath source
 
-    /// Checks every source file of `package`, running the linters its manifest turns on over each. `listener` is told
+    /// Checks every source file of `package`, running its linters (`Package.Linters`) over each. `listener` is told
     /// each file's full path as its compile starts, in the order the files are compiled, and each module's check as it
     /// starts and ends, so a caller can show where a slow build is and how long each module took.
     let buildReporting (listener: CompileListener) (package: Package) : PackageBuild =
         let modules = modules package
         let sources = package.Sources |> List.map (fun file -> file, File.ReadAllText file)
         let results =
-            compileAll listener File.ReadAllText modules package.Manifest.Linters sources
+            compileAll listener File.ReadAllText modules package.Linters sources
             |> List.map2 (fun (_, source) (file, result) ->
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
