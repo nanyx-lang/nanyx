@@ -138,7 +138,9 @@ files, `filesystem.inMemory` runs a block with a `FileSystem` that holds its fil
 `nanyx test` is built: the [command line](../standard-tools/command-line#nanyx-test) says what it does, and
 [Test builds](../deep-dives/test-builds) how. It takes a package's directory or manifest, or a script; it runs each test
 in a fresh instance of the test build, whose host runs the test at the index the runtime gives it; it reports each test,
-with why one failed and what it printed; and it stops a test that runs past `--timeout`. What is left of the design is
+with why one failed and what it printed, its `dbg`s among it, which a passing test's report leaves out unless
+`--show-output` asks for it ([#2103](https://github.com/nanyx-lang/nanyx/issues/2103)); and it stops a test that runs
+past `--timeout`. What is left of the design is
 below.
 
 The tests run in a core module, as `nanyx run`'s program does, so a test that reaches a call of an `@import` fails with
