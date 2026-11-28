@@ -67,7 +67,12 @@ the checked package when it comes from one, and never works them out again: a pr
   body, the same definition at the same arguments, is `IrSelf(depth, groupMember)`: how many groups out it is, 0 the
   innermost, and where it is in that group. The group's types are in the order of their positions in the checker's
   group and then of their arguments, so a group is the same IR type whichever of its types it is reached from, and
-  each type is lowered once, however many paths through the group lead to it (#3209).
+  each type is lowered once, however many paths through the group lead to it (#3209). What it finds is kept for the
+  module (`CoreIrLowerTypes`' `Converted`, by the module's contexts' layouts): each type's IR type, each group, and a
+  group's types where no other group is around them, shared by every reference into it. Lowering asks for the IR type
+  of every expression, so a module of a large group, as a syntax tree's, unfolded the group thousands of times:
+  assembling `nanyx.lint`'s lint build took 37 seconds, and takes 3.6 with them kept, to the same code
+  ([#3261](https://github.com/nanyx-lang/nanyx/issues/3261)).
 - **Code that reads what a value is made of reads `IrType.unfold`.** It gives the selected body, with each `IrSelf` that
   stands for a type of its group that type, so the parts of a value are typed without free `IrSelf`s, and a value of a
   recursive type is laid out as its body is. A group's name in WebAssembly is a hash of its bodies, with which of them
