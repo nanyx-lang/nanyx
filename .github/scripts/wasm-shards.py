@@ -18,7 +18,7 @@ import sys
 # alone took 312 s.
 SHARDS = {
     1: [
-        "Console", "Docs", "Equality", "Except", "Hashing", "Names", "Nominals", "Profiling"
+        "Console", "Docs", "Equality", "Except", "Hashing", "Linters", "Names", "Nominals", "Profiling"
     ],
     2: [
         "Asserts", "Chars", "Components", "Contexts", "ControlFlow", "Debugging", "Embedding", "Examples",

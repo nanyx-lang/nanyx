@@ -1,0 +1,29 @@
+--| The test host's root for a test build run with its files in memory: `nanyx test
+  --files-in-memory`, as the editor's live mode runs tests, builds the tests from it in place of
+  `test.host`. Its [`run`] runs a test as `test.host`'s does, but for a test marked `@test(#io)`,
+  whose `FileSystem` keeps what the test writes, appends, makes and deletes in memory, over the real
+  files (see `nanyx.fs`'s `filesystem.overlay`), so nothing the test does reaches the disk. A test
+  build without the flag is built from `test.host`, and has none of this.
+export module test.host.memory
+
+import (
+  nanyx/async as (Async)
+  nanyx/host.runtime
+  nanyx/random as (Random)
+  nanyx.cli/console as (Console)
+  nanyx.cli/env as (Env)
+  nanyx.fs/filesystem as (FileSystem)
+  nanyx.fs/filesystem as filesystem
+  nanyx.test.host/test.runs as (isIo, isolated, seededTest)
+  nanyx.wasi/preview1.system as wasiSystem
+)
+
+--| Runs the test the runtime asks for as `test.host`'s `run` does, with an `#io` test's `FileSystem`
+  in memory over the real one. What `entry` returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Random] int -> a) -> ()
+  = { entry ->
+    if isIo()
+      then wasiSystem.provide({ _ -> filesystem.overlay({ seededTest(entry) }) })
+      else isolated(entry)
+  }

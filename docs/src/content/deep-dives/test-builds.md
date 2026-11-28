@@ -125,6 +125,14 @@ package's directory, or the script's, which it may read and write, with the envi
 shell; any other test reaches no directory and sees no variables. What a `#io` test's real `Console` writes to standard
 output is kept with what it printed (`TestRun.Output`).
 
+`nanyx test --files-in-memory` builds the test build's root under the test host's `filesInMemory` root,
+`test.host.memory` (`Host.InMemory`, swapped in by `Package.testBuild` and `Script.testBuild`), as `nanyx run
+--files-in-memory` builds a program under the console host's. Its `run` is `test.host`'s with the `#io` branch inside
+`nanyx.fs`'s `filesystem.overlay`. The two roots share the module `test.runs`, which holds the `nanyx:test` imports,
+`isolated`, which runs a test that isn't `#io` with its fakes, and `seededTest`; each root exports only `run`, since a
+function a host's root exports that requires a context its prelude doesn't name would make that context one the host
+doesn't provide (see `ImportMerging`).
+
 # Tests that expect a crash
 
 `@test(#crashes)` and `@test(#crashes("text"))` mark a test that passes only if it crashes ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)).

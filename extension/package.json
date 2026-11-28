@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.42",
+  "version": "0.9.44",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -123,6 +123,11 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "nanyx.toggleShowValues",
+        "title": "Nanyx: Toggle showing every value",
+        "icon": "$(eye)"
+      },
+      {
         "command": "nanyx.downloadCompiler",
         "title": "Nanyx: Download the compiler"
       },
@@ -199,6 +204,11 @@
         {
           "command": "nanyx.toggleLiveMode",
           "when": "view == nanyx.live && viewItem == liveSwitch",
+          "group": "inline"
+        },
+        {
+          "command": "nanyx.toggleShowValues",
+          "when": "view == nanyx.live && viewItem == showSwitch",
           "group": "inline"
         }
       ],
@@ -317,6 +327,19 @@
           "default": 10,
           "minimum": 1,
           "markdownDescription": "How many seconds a live run may take before it is stopped, so that a program that never ends doesn't keep a process busy. See **Live mode** in the Nanyx sidebar."
+        },
+        "nanyx.live.show": {
+          "type": "string",
+          "enum": [
+            "dbg",
+            "every"
+          ],
+          "enumDescriptions": [
+            "What each `dbg` writes, as `▸ 84` at the end of its line.",
+            "Every value the program's code binds or gives, each `def` that isn't a function and each statement that gives more than `()`, as `= 84` at the end of its line, and what each `dbg` writes."
+          ],
+          "default": "dbg",
+          "markdownDescription": "What a live run shows in the editor. **Live mode** in the Nanyx sidebar and **Nanyx: Toggle showing every value** switch it."
         }
       }
     },

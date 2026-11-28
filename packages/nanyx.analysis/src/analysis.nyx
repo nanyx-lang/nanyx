@@ -1,0 +1,118 @@
+--| What a linter knows about the module it checks, and what it reports.
+
+  A linter is a package whose root module exports `lint: [Analysis] Module -> list(Report)`. It is
+  given the module's [syntax tree](syntax), and asks [`Analysis`] what type checking found out
+  about it: the type of an expression, the symbol a name refers to, the places that refer to a
+  symbol. Each [`Report`] says which of the linter's rules found something, where, and how to fix
+  it; the compiler gives it the rule's code and the severity the project sets for it.
+export module analysis
+
+import nanyx.analysis/syntax as (NodeId, Span)
+
+--| A type as type checking found it. A `#named` type is an alias or a nominal type, written by its
+  name and its arguments rather than what it stands for. A `#function` requires its `contexts`
+  where it is called. `undefined`, the type of what never gives a value, is the `#union` of no
+  tags. A type the compiler can't describe here is `#other`, as it writes it.
+export type Ty =
+  | #variable(string)
+  | #primitive(string)
+  | #named(name: string, arguments: list(Ty), isNominal: bool)
+  | #function(input: Ty, output: Ty, contexts: list(Ty))
+  | #record(list((string, Ty)))
+  | #openRecord(list((string, Ty)))
+  | #tag(name: string, payload: #some(Ty) | #none)
+  | #union(tags: list(Ty), isOpen: bool)
+  | #applied(name: string, arguments: list(Ty))
+  | #other(string)
+
+--| Identifies a symbol, for the questions [`Analysis`] answers about it.
+export type SymbolId = int
+
+--| What a symbol is: a def at the top level of a module or in a block, a lambda's parameter, a
+  name a pattern binds, an import, a type or a context, a member of a context, or a unit of
+  measure.
+export type SymbolKind =
+  | #topLevel
+  | #local
+  | #parameter
+  | #patternVariable
+  | #importedModule
+  | #typeDefinition
+  | #contextMember
+  | #unitOfMeasure
+
+--| Something a name can refer to: its name, what it is, where in this module it is declared (`#none`
+  for one declared in another module, or that the compiler made up), and whether its module exports
+  it.
+export type Symbol = (
+  id: SymbolId
+  name: string
+  kind: SymbolKind
+  declaration: #some(Span) | #none
+  isExported: bool
+)
+
+--| A doc comment: where it is written, its text as written, and what it documents: the declaration
+  whose name is written at the span, the tag written there, the module, or nothing it can document.
+export type DocComment = (
+  span: Span
+  text: string
+  documents: #declaration(Span) | #tag(Span) | #module | #nothing
+)
+
+--| An edit to the module's text: what `span` covers replaced by `newText`.
+export type TextEdit = (span: Span, newText: string)
+
+--| A fix for what a report found: its title, as the editor offers it, and its edits.
+export type Fix = (title: string, edits: list(TextEdit))
+
+--| Something one of a linter's rules found: the rule's `id`, where, the message, the one name the
+  headline shows after the rule's title (the binding an unused-binding report is about), other
+  places it relates to, each with what it is, and its fixes.
+export type Report = (
+  rule: string
+  span: Span
+  message: string
+  subject: #some(string) | #none
+  related: list((Span, string))
+  fixes: list(Fix)
+)
+
+--| What type checking found out about the module a linter checks, asked by node or by symbol.
+export context Analysis = (
+  --| The module's text, its line endings made `\n`: what spans are offsets into.
+  source: () -> string
+  --| The type of an expression, or `#unknown` where the compiler doesn't know it.
+  typeOf: NodeId -> #some(Ty) | #unknown
+  --| The type of the function a call or pipe calls there, with the contexts it requires.
+  calleeTypeOf: NodeId -> #some(Ty) | #unknown
+  --| The symbol a name, call, pipe target or qualified name refers to, as written.
+  symbolOf: NodeId -> #some(Symbol) | #none
+  --| The import a name came in through.
+  importOf: NodeId -> #some(Symbol) | #none
+  --| A symbol by its id.
+  symbol: SymbolId -> #some(Symbol) | #none
+  --| The symbols the module declares: its definitions, types, parameters, pattern variables and
+    imports, each with where it is declared.
+  symbols: () -> list(Symbol)
+  --| The type of a declaration.
+  typeOfSymbol: SymbolId -> #some(Ty) | #unknown
+  --| The contexts a top-level def requires, written or inferred.
+  contextsOf: SymbolId -> list(Ty)
+  --| The nodes in the module that refer to a symbol.
+  referencesTo: SymbolId -> list(NodeId)
+  --| The nodes desugaring made for a node as written, such as a workflow bind's call, whose types
+    `typeOf` has too.
+  lowered: NodeId -> list(NodeId)
+  --| A type written as the compiler's messages and hover write it.
+  describe: Ty -> string
+  --| Of the `match` at the node, the positions of the arms before the arm at the position given
+    that between them match every value it does, from the pattern space exhaustiveness checking
+    uses: none for an arm that can match.
+  coveringArms: (NodeId, int) -> list(int)
+  --| Whether a pipe's target is written with a type's name that the name without it reaches as
+    well, as in `xs \list.map` where `xs` is a list.
+  redundantTypeName: NodeId -> bool
+  --| The module's doc comments, each with what it documents.
+  docComments: () -> list(DocComment)
+)

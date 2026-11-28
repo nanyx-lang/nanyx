@@ -65,17 +65,35 @@ module DbgSites =
         | None when old.Length = current.Length -> current |> List.tryItem (List.findIndex ((=) site) old)
         | None -> None
 
+    /// The lines of `text`.
+    let private linesOf (text: string) = text.ReplaceLineEndings("\n").Split('\n')
+
+    /// Where the place at `line` and `column` of `before`, a value `nanyx run --show-values` showed, which no `dbg` is
+    /// at, is in `now`: at its column on the line of `now` with the text its line had that is nearest to where it was,
+    /// the earlier of two as near; none when no line has that text.
+    let private byLine (before: string array) (now: string array) (line: int, column: int) =
+        if line < 1 || line > before.Length then
+            None
+        else
+            now
+            |> Array.indexed
+            |> Array.filter (fun (_, text) -> text = before.[line - 1])
+            |> Array.sortBy (fun (index, _) -> abs (index + 1 - line), index)
+            |> Array.tryHead
+            |> Option.map (fun (index, _) -> index + 1, column)
+
     /// Where each of `places`, a `dbg` a run reached in the file when its text was `before`, a line and a column counted
-    /// from 1, is in its text `now` (see `matching`): `None` for a place that names no `dbg` of `before`, or whose `dbg`
-    /// can't be found; none at all if either text doesn't parse, when the editor keeps the places it has.
+    /// from 1, is in its text `now` (see `matching`): `None` for a `dbg` that can't be found. A place no `dbg` of
+    /// `before` is at, a value `--show-values` showed, follows its line (see `byLine`). None at all if either text
+    /// doesn't parse, when the editor keeps the places it has.
     let moved (before: string) (now: string) (places: (int * int) list) : (int * int) option list option =
         match sitesIn before, sitesIn now with
         | Some old, Some current ->
+            let beforeLines, nowLines = linesOf before, linesOf now
             places
             |> List.map (fun (line, column) ->
-                old
-                |> List.tryFind (fun site -> site.Line = line && site.Column = column)
-                |> Option.bind (matching old current)
-                |> Option.map (fun found -> found.Line, found.Column))
+                match old |> List.tryFind (fun site -> site.Line = line && site.Column = column) with
+                | Some site -> matching old current site |> Option.map (fun found -> found.Line, found.Column)
+                | None -> byLine beforeLines nowLines (line, column))
             |> Some
         | _ -> None

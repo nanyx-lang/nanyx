@@ -240,13 +240,6 @@ module UnreachableArms =
                 let start = if bar > 0 && source.[bar - 1] = ' ' then bar - 1 else bar
                 Some { Span = TextEdit.spanBetween source first start body.Span.End; NewText = "" }
 
-    /// Whether the arm at `index` is one the parser made up: the `()` an `if ... is` without an `else` stands for,
-    /// which is reported at the `then` branch, where nothing can be done about it.
-    let private isMadeUp (arms: MatchArm list) (index: int) =
-        match arms with
-        | [ _, thenBranch; _, (Kind UnitExpr as madeUp) ] -> index = 1 && madeUp.Span = thenBranch.Span
-        | _ -> false
-
     let lint (model: SemanticModel) : Report list =
         model.Syntax
         |> List.collect SyntaxTree.ofItem
@@ -254,44 +247,30 @@ module UnreachableArms =
         |> List.collect (fun expr ->
             match expr.Kind with
             | Match(values, arms) ->
-                let types = values |> List.map (fun value -> model.Types |> Map.tryFind value.Id)
-                // A lone `else` or `_` matches whatever every value is, as `desugar` has it for the compiler, and so
-                // does any other lone pattern that matches every tuple of them. An arm with another lone pattern is
-                // matched against the tuple, whose type isn't recorded, so its match isn't looked at.
-                let rowOf (patterns: Pattern list) =
-                    match PatternSpace.ofArm values.Length patterns with
-                    | [ pattern ] when values.Length > 1 && PatternSpace.isCatchAll pattern ->
-                        List.replicate values.Length (Pattern.at pattern.Span WildcardPattern)
-                    | row -> row
-                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, rowOf patterns, body)
+                let indexed = MatchCoverage.rows values arms
                 let spanOf (patterns: Pattern list) = SourceSpan.between (List.head patterns).Span (List.last patterns).Span
-                let comparable = indexed |> List.forall (fun (_, patterns, _) -> patterns.Length = values.Length)
                 indexed
                 |> List.choose (fun (index, patterns, body) ->
-                    if not comparable || index = 0 || patterns.IsEmpty || isMadeUp arms index then
-                        None
-                    else
-                        let earlier = indexed |> List.take index |> List.map (fun (i, others, _) -> i, others)
-                        PatternSpace.coveringArms earlier types patterns
-                        |> Option.map (fun covering ->
-                            let message =
-                                match covering with
-                                | [ _ ] -> "This arm can never match: an arm before it matches every value it does."
-                                | _ -> "This arm can never match: the arms before it match every value it does between them."
-                            { Rule = rule.Id
-                              Subject = None
-                              // The whole arm, which the editor draws faint: none of it can run.
-                              Span = if SourceSpan.isNone body.Span then spanOf patterns else SourceSpan.between (List.head patterns).Span body.Span
-                              Message = message
-                              Related =
-                                covering
-                                |> List.map (fun i ->
-                                    let _, others, _ = indexed.[i]
-                                    spanOf others, (if covering.Length = 1 then "matches every value first" else "matches some of them first"))
-                              Fixes =
-                                removal model.Source patterns body
-                                |> Option.map (fun edit -> { Title = "Remove the unreachable arm"; Edits = [ edit ] })
-                                |> Option.toList }))
+                    MatchCoverage.covering model.Types values arms index
+                    |> Option.map (fun covering ->
+                        let message =
+                            match covering with
+                            | [ _ ] -> "This arm can never match: an arm before it matches every value it does."
+                            | _ -> "This arm can never match: the arms before it match every value it does between them."
+                        { Rule = rule.Id
+                          Subject = None
+                          // The whole arm, which the editor draws faint: none of it can run.
+                          Span = if SourceSpan.isNone body.Span then spanOf patterns else SourceSpan.between (List.head patterns).Span body.Span
+                          Message = message
+                          Related =
+                            covering
+                            |> List.map (fun i ->
+                                let _, others, _ = indexed.[i]
+                                spanOf others, (if covering.Length = 1 then "matches every value first" else "matches some of them first"))
+                          Fixes =
+                            removal model.Source patterns body
+                            |> Option.map (fun edit -> { Title = "Remove the unreachable arm"; Edits = [ edit ] })
+                            |> Option.toList }))
             | _ -> [])
         |> List.sortBy (fun report -> report.Span.Start)
 

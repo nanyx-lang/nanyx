@@ -206,6 +206,7 @@ let private command (arguments: string list) : Shell -> int =
         let noInline, rest = takeFlag "--no-inline" rest
         let yieldAtEveryWait, rest = takeFlag "--yield-at-every-wait" rest
         let filesInMemory, rest = takeFlag "--files-in-memory" rest
+        let showValues, rest = takeFlag "--show-values" rest
         let checkMemory, rest = takeFlag "--check-memory" rest
         let memory, rest = takeFlag "--memory" rest
         let memoryCheck = if memory then MemoryCheck.Report elif checkMemory then MemoryCheck.Check else MemoryCheck.Off
@@ -226,7 +227,7 @@ let private command (arguments: string list) : Shell -> int =
             | "--dbg-to" :: file :: rest -> file, rest
             | _ -> null, rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory, showValues)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest
@@ -255,9 +256,10 @@ let private command (arguments: string list) : Shell -> int =
         let given, rest = valued [ "--filter"; "--seed"; "--timeout"; "--format"; "--test"; "--module" ] Map.empty [] rest
         let value name = given |> Map.tryFind name |> Option.toObj
         let list, rest = takeFlag "--list" rest
+        let filesInMemory, rest = takeFlag "--files-in-memory" rest
         let _, release, timings, _, path = options (null, false, false, null, []) rest
         fun shell ->
-            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module")
+            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module", filesInMemory)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
@@ -1171,7 +1173,7 @@ let testBuildOf (directory: TempDirectory) : byte array * Diagnostic list =
     let store = testStore ()
     match Package.ofManifestFrom store (Path.Combine(directory.Path, "tested.nyxp")) with
     | Ok found ->
-        let build = Package.testBuild store found |> Result.defaultWith failwith
+        let build = Package.testBuild store false found |> Result.defaultWith failwith
         let root = (Package.testResult build).Value
         let typed = root.Typed |> Option.defaultWith (fun () -> failwith $"%A{build.Diagnostics @ root.Diagnostics}")
         let options = { WasmOptions.Default with Places = true; SourceRoot = Some directory.Path }
@@ -1185,3 +1187,29 @@ let runTestsOf (wasm: byte array) (seed: int64) (timeout: TimeSpan) : Map<string
     match Nanyx.Runtime.WasmTester.run wasm (Directory.GetCurrentDirectory()) [] (fun _ -> true) seed timeout ignore with
     | Ok runs -> runs |> List.map (fun run -> run.Test.FullName, run) |> Map.ofList
     | Error error -> failwith $"%A{error}"
+
+/// The lint build of the linter script at `inputPath`, whose `@entry` is a linter's `lint` and whose host is the linter
+/// host, `nanyx.analysis.host`, compiled as `nanyx run` compiles a script, with the tests' package store: the module, in
+/// the binary format (see `Transpiler.Wasm.LintBuild`).
+let lintBuildOf (inputPath: string) : byte array =
+    let mutable compiled = None
+    let compiling =
+        inProcess (Path.GetDirectoryName inputPath) "" [] (fun shell ->
+            if CliCommands.TryPullScript(shell, inputPath) then
+                compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                0
+            else 1)
+    match compiled with
+    | Some result when result.Diagnostics |> List.exists NyxCompiler.Diagnostics.isError ->
+        failwith $"{inputPath} has errors:\n%A{result.Diagnostics |> List.filter NyxCompiler.Diagnostics.isError}"
+    | Some { Typed = Some typed } -> Nanyx.LargeStack.run (fun () -> Transpiler.Wasm.LintBuild.assemble WasmOptions.Default typed)
+    | _ -> failwith $"{inputPath} didn't compile:\n{compiling.StandardError}"
+
+/// The linter `name`, with the rules `rules`, that runs the lint build `wasm` (see `lintBuildOf`) over each module, as
+/// the compiler runs a linter package.
+let lintBuildLinter (name: string) (rules: NyxCompiler.Rule list) (wasm: byte array) : NyxCompiler.Linter =
+    let run = Nanyx.Runtime.WasmLinter.compile wasm |> Result.defaultWith (fun error -> failwith $"%A{error}")
+    { Name = name
+      Package = $"{name}.lint"
+      Rules = rules
+      Lint = NyxCompiler.LintAnswers.lintWith (fun answer -> run answer |> Result.mapError (fun error -> $"%A{error}")) }

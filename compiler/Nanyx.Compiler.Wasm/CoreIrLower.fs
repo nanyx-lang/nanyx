@@ -303,8 +303,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
             k (Expr.make (Crash([ message ], true)) ty)
-        | FunctionCall(name, nameSpan, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
-            // Prints the value's text, which the printer of its type writes, and leaves the value.
+        | FunctionCall(name, nameSpan, args) when (name = DbgSyntax.builtIn || name = DbgSyntax.shown) && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
+            // Prints the value's text, which the printer of its type writes, and leaves the value; a shown value's by its type where the printer can't (see `ShownValues`).
             // The one argument, which may be a tuple, as the type checker has it.
             let value =
                 match args with
@@ -314,9 +314,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | Stripped -> this.Complex scope value k
             | PrintedFrom root ->
                 let valueTy = unconstrainedAsUnit (substitute subst input.ExprTypes.[expr.Id])
-                let printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing valueTy)
+                let printer = printerTools.PrinterOf (if name = DbgSyntax.shown then CoreIrLowerDbg.ShowingAny valueTy else CoreIrLowerDbg.Showing valueTy)
                 // Where `dbg` is written, which for `\dbg` at the end of a pipeline is not where the call starts.
-                let site = CoreIrLowerDbg.site root (nameSpan |> Option.defaultValue expr.Span)
+                let site = CoreIrLowerDbg.site (name = DbgSyntax.shown) root (nameSpan |> Option.defaultValue expr.Span)
                 this.Complex scope value (fun lowered ->
                     let held = newVar (uniqueName "__dbg_value") Local lowered.Type
                     let text = newTemp IrString

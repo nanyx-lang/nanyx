@@ -18,6 +18,8 @@ type ModuleFacts =
       Imports: NyxCompiler.Extern list
       /// Whether some `dbg` prints, through `$dbg_str` or the runtime's `nanyx:debug` `dbg`.
       UsesDbgHelpers: bool
+      /// Whether some value `--show-values` shows is given to the runtime's `nanyx:debug` `value` (see `ShownValues`).
+      UsesShownValues: bool
       /// Whether some function reads the address of the block the module sets aside for its host.
       UsesHostState: bool
       /// Whether some function writes a float or an `F32` as text, which needs the scratch block the module sets aside
@@ -36,6 +38,7 @@ let collect (functions: Function list) : ModuleFacts =
     let staticClosures = ResizeArray<string * int>()
     let imports = ResizeArray<NyxCompiler.Extern>()
     let usesDbgHelpers = ref false
+    let usesShownValues = ref false
     let usesHostState = ref false
     let usesFloatText = ref false
     let usesPowersOfFive = ref false
@@ -125,6 +128,7 @@ let collect (functions: Function list) : ModuleFacts =
             strings.Add site.Prefix
             atom text
             usesDbgHelpers.Value <- true
+            if site.Shown then usesShownValues.Value <- true
         | Crash(messages, _) ->
             strings.AddRange messages
             // What `Helpers.crashed` is given: the messages as one.
@@ -167,6 +171,7 @@ let collect (functions: Function list) : ModuleFacts =
       StaticClosures = staticClosures |> Seq.distinct |> List.ofSeq
       Imports = imports |> Seq.distinct |> List.ofSeq
       UsesDbgHelpers = usesDbgHelpers.Value
+      UsesShownValues = usesShownValues.Value
       UsesHostState = usesHostState.Value
       UsesFloatText = usesFloatText.Value
       UsesPowersOfFive = usesPowersOfFive.Value

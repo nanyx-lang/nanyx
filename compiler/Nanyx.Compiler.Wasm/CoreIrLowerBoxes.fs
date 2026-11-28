@@ -51,7 +51,7 @@ let rec holdsBox (ty: IrType) : bool =
     | IrRecord fields -> fields |> List.exists (snd >> holdsBox)
     | IrList element
     | IrArray element -> holdsBox element
-    | IrRecursive body -> holdsBox body
+    | IrRecursive(_, bodies) -> bodies |> List.exists holdsBox
     | IrFunction(input, output, _, _) -> holdsBox input || holdsBox output
     | _ -> false
 

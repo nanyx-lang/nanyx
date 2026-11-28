@@ -1,0 +1,5 @@
+--| What every module of a lint build sees without importing it: `Analysis`, the context through which a
+  linter asks what type checking found out about the module it checks, which the linter host provides.
+export module analysis.prelude
+
+export nanyx.analysis/analysis (Analysis)

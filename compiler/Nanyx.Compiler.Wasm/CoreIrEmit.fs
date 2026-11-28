@@ -933,7 +933,7 @@ type private FunctionEmitter(context: EmitContext) =
                       $"i32.const {site.Column}"
                       atomsAfter true [ text ]
                       $"local.tee ${held}"
-                      $"call ${dbgImport}"
+                      $"call ${(if site.Shown then valueImport else dbgImport)}"
                       "i32.eqz"
                       "if"
                       prefix

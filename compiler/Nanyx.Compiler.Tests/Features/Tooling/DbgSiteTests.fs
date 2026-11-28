@@ -34,6 +34,10 @@ let ``Deleting one dbg of a definition leaves the others on theirs, and drops it
     Assert.Equal(Some [ None; Some (5, 10) ], DbgSites.moved source now [ 5, 3; 6, 10 ])
 
 [<Fact>]
-let ``A place that names no dbg has none, and a text that doesn't parse moves nothing`` () =
-    Assert.Equal(Some [ None ], DbgSites.moved source source [ 1, 1 ])
+let ``A place that names no dbg, a shown value's, follows the nearest line with its text, and has none once it is gone`` () =
+    let now = "-- a comment\n\n" + source.Replace("  n * 2 \\dbg\n", "")
+    Assert.Equal(Some [ Some (3, 13); Some (6, 1); None ], DbgSites.moved source now [ 1, 13; 4, 1; 6, 3 ])
+
+[<Fact>]
+let ``A text that doesn't parse moves nothing`` () =
     Assert.Equal(None, DbgSites.moved source "def broken = (\n" [ 2, 1 ])
