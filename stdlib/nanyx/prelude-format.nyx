@@ -23,7 +23,7 @@ export type BadFormat = (
   program with the reason.
 
   The prelude has an instance for `int`, `float`, the sized numbers, `string`, `char`, `bool` and
-  `Instant`. The numbers, strings, chars and bools take Python's format-spec mini-language: `[[fill]
+  `Instant`, and the compiler makes one for each unit quantity. The numbers, strings, chars and bools take Python's format-spec mini-language: `[[fill]
   align][sign][z][#][0][width][grouping][.precision][type]`, where
 
   - `align` is `<` (left), `>` (right), `^` (centred) or `=` (padded after the sign), with the
@@ -50,6 +50,12 @@ export type BadFormat = (
   (`NAN` and `INF` for `E`, `F` and `G`). The empty spec writes a value as interpolation does.
 
   An `Instant` takes `strftime`'s directives, in UTC, with English names (see [`Instant.tryFormat`]).
+
+  A unit quantity, a value of a dimension stored as an `int`, a float or a sized integer narrower
+  than 64 bits, takes a float's spec, then the name of one of its dimension's units after a space:
+  its number is written in that unit by the spec, then the unit, so `format(1500ms, ".1f s")` is
+  `"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
+  `format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
 export context Format(a) = (tryFormat: (a, string) -> #some(string) | #badFormat(BadFormat))
 
 --| `value` written by `spec` (see [`Format`]): `format(1234.5, ",.1f")` is `"1,234.5"`, and
@@ -131,8 +137,7 @@ def fmtBad
 
 --| `spec`, a spec for a value of the type `of`, read as Python's format-spec mini-language: `[[fill]
   align][sign][z][#][0][width][grouping][.precision][type]`. Which of its parts a type takes is
-  for the type to say. The compiler reads a literal spec with its own reader of the same language
-  (`FormatSpecs` in the compiler), and one table of specs tests both.
+  for the type to say.
 def fmtSpec: string, string -> #some(FormatSpec) | #badFormat(BadFormat) = { spec, of ->
   def length = __nanyx_string_length(spec)
   def firstLength = fmtCharLength(fmtByte(spec, 0))
@@ -665,6 +670,97 @@ export def F32.tryFormat: F32, string -> #some(string) | #badFormat(BadFormat) =
       | #some(parsed) -> fmtFloatParsed(F32.toFloat(x), spec, "F32", parsed)
       | #badFormat(bad) -> #badFormat(bad)
 }
+
+-- Unit quantities
+
+--| The unit of `names`, each `scales` of its dimension's default storage units, that `spec` names at
+  its end after a space, and where its name starts.
+def fmtNamedUnit
+  : string, list(string), list(float) -> #some(name: string, scale: float, at: int) | #none
+  = {
+    | spec, [name, ...names], [scale, ...scales] ->
+      def end = __nanyx_string_length(spec)
+      def at = end - __nanyx_string_length(name)
+
+      if at >= 1 and fmtByte(spec, at - 1) == 32 and __nanyx_string_slice(spec, at, end) == name
+        then #some(name = name, scale = scale, at = at)
+        else fmtNamedUnit(spec, names, scales)
+    | _, _, _ -> #none
+  }
+
+--| The unit of `names` a measured value of `x` default storage units is written in when its spec
+  names none, as its `toString` writes a float: the largest its magnitude is at least 1 of, or the
+  smallest, and `display` for zero.
+def fmtPickedUnit: float, list(string), list(float), string -> (name: string, scale: float) = {
+  | x, [name, ...names], [scale, ...scales], display ->
+    def count = x / scale
+
+    def smallest = match names
+      | [] -> true
+      | _ -> false
+
+    if x != 0.0 and (count >= 1.0 or count <= -1.0 or smallest)
+      then (name = name, scale = scale)
+      else fmtPickedUnit(x, names, scales, display)
+  | _, _, _, display -> (name = display, scale = 1.0)
+}
+
+--| The byte of `spec` just after its last space, or -1 if it has none.
+def fmtAfterLastSpace: string, int -> int = { spec, at ->
+  if at < 0 then -1 else if fmtByte(spec, at) == 32 then at + 1 else fmtAfterLastSpace(spec, at - 1)
+}
+
+--| `names` as a spec's `expected` lists them.
+def fmtUnitList: list(string) -> string = {
+  | [] -> "no unit: the module sees none"
+  | [name] -> "`{name}`"
+  | [name, last] -> "`{name}` or `{last}`"
+  | [name, ...names] -> "`{name}`, {fmtUnitList(names)}"
+}
+
+--| What the derived `tryFormat` of a measured value calls: `x`, a number of its dimension's default
+  storage units, written by `spec`, a float's spec (see [`float.tryFormat`]) then the name of a unit
+  after a space, `".1f ms"`, or a float's spec alone. The number is written in the unit the spec
+  names, of `names`, each `scales` default storage units, or with none named in the one of `picks`,
+  each `pickScales`, that its `toString` writes it in, and the unit's name after it, `"500.0ms"`. A
+  value of a dimension with no unit the module sees, `display` empty, is written between `before`
+  and `after`. `of` names the dimension in a `BadFormat`.
+export def __measuredTryFormat
+  : float,
+    string,
+    list(string),
+    list(float),
+    list(string),
+    list(float),
+    string,
+    string,
+    string,
+    string
+    -> #some(string) | #badFormat(BadFormat)
+  = { x, spec, names, scales, picks, pickScales, display, before, after, of ->
+    def unit = match fmtNamedUnit(spec, names, scales)
+      | #some(named) -> named
+      | #none ->
+        def picked = fmtPickedUnit(x, picks, pickScales, display)
+        (name = picked.name, scale = picked.scale, at = __nanyx_string_length(spec) + 1)
+
+    def numberSpec = __nanyx_string_slice(spec, 0, unit.at - 1)
+    def numberEnd = __nanyx_string_length(numberSpec)
+
+    def written = match fmtSpec(numberSpec, of)
+      | #some(parsed) -> fmtFloatParsed(x / unit.scale, spec, of, parsed)
+      | #badFormat(bad) -> fmtBad(spec, of, bad.at, bad.expected)
+
+    match written
+      | #some(text) ->
+        if unit.name == "" then #some("{before}{text}{after}") else #some(text ++ unit.name)
+      | #badFormat(bad) ->
+        def afterSpace = fmtAfterLastSpace(numberSpec, numberEnd - 1)
+
+        if unit.at > numberEnd and afterSpace > 0 and afterSpace < numberEnd
+          then fmtBad(spec, of, afterSpace, "the name of a unit of {of}: {fmtUnitList(names)}")
+          else #badFormat(bad)
+  }
 
 -- Text
 
