@@ -232,15 +232,23 @@ module internal ImportMerging =
                 let hidden = unselected.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
                 typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && visible.ContainsKey name)),
                 Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
-        // A function that requires a context requires it wherever it is called, under the name it is imported as.
+        // A function that requires a context requires it wherever it is called, under the name it is imported as. A
+        // value the import brings in replaces one of its name brought in before, the prelude's as the module's imports
+        // replace it, and so do the contexts it requires, or that it requires none (#3173).
+        let replaced =
+            exportedValueTypes.Keys |> Seq.filter isSelected |> Seq.map (ModuleLinking.importedName qualifier) |> Set.ofSeq
         let contextRequirements =
             ModuleLinking.withBlockReExports imported imported.ContextRequirements
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts) state.ContextRequirements
+            |> Map.fold
+                (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts)
+                (state.ContextRequirements |> Map.filter (fun name _ -> not (replaced.Contains name)))
         let contextSignatures =
             ModuleLinking.withBlockReExports imported imported.ContextSignatures
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
+            |> Map.fold
+                (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature)
+                (state.ContextSignatures |> Map.filter (fun name _ -> not (replaced.Contains name)))
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
         // A unit is written unqualified, as in `500ms`, under an alias too: an import brings in the units its module
         // exports, or those it selects. Two units of one name are ambiguous where the name is written (see `Units`), but
