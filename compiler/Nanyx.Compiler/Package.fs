@@ -713,8 +713,16 @@ module Package =
 
     /// Checks every source file and every test file of `package` (see `withTests`), as `build` checks its sources; or
     /// why the test host, found in `store`, can't be read.
-    let testBuild (store: PackageStore) (package: Package) : Result<PackageBuild, string> =
-        withTests store package |> Result.map build
+    let testBuild (store: PackageStore) (filesInMemory: bool) (package: Package) : Result<PackageBuild, string> =
+        withTests store package
+        |> Result.bind (fun underTest ->
+            match underTest.TestHost with
+            | Some (host, hostPackage) when filesInMemory ->
+                match host.InMemory with
+                | Some inMemory -> Result.Ok { underTest with TestHost = Some (inMemory, hostPackage) }
+                | None -> Result.Error (Hosts.noFilesInMemory host)
+            | _ -> Result.Ok underTest)
+        |> Result.map build
 
     /// The modules of the package `build` built that mark a def `@test`, by name, in the order of its files, each with
     /// how many it marks.

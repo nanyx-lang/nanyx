@@ -41,8 +41,8 @@ const dbgValues_1 = require("./dbgValues");
 exports.COMMAND_SHOW_DBG_VALUES = "nanyx.showDbgValues";
 /**
  * The values a run's `dbg`s gave, shown at the end of each `dbg`'s line in ghost text (see `ghostText`), with a hover
- * that lists them (see `hoverMarkdown`). A run the editor starts gives them: `nanyx run --dbg-to`, or a test run's
- * `dbg` lists. Each file's values are cleared by the next run that reaches one of its `dbg`s, fade once the file is
+ * that lists them (see `hoverMarkdown`), and every value it showed, with `--show-values`, the same way. A run the
+ * editor starts gives them: `nanyx run --dbg-to`, or a test run's `dbg` lists. Each file's values are cleared by the next run that reaches one of its `dbg`s, fade once the file is
  * edited, and follow their `dbg`s as lines change, by the language server's `nanyx/dbgSites`. Closing the file clears
  * them.
  */
@@ -77,9 +77,9 @@ class DbgView {
         hits.forEach((hit) => byFile.set(hit.file, [...(byFile.get(hit.file) ?? []), hit]));
         for (const [file, fileHits] of byFile) {
             const known = this.files.get(file);
-            const values = known && known.run === run ? known : { run, ranText: this.textOf(file), hits: [], sites: [], places: [], faded: false };
-            values.hits.push(...fileHits);
-            values.sites = (0, dbgValues_1.sitesOf)(values.hits).get(file) ?? [];
+            const values = known && known.run === run ? known : { run, ranText: this.textOf(file), byPlace: new Map(), sites: [], places: [], faded: false };
+            (0, dbgValues_1.addHits)(values.byPlace, fileHits);
+            values.sites = (0, dbgValues_1.inOrder)(values.byPlace);
             values.places = values.sites.map((site) => ({ line: site.line, column: site.column }));
             this.files.set(file, values);
             if (values.faded) {
@@ -165,18 +165,20 @@ class DbgView {
         editor.setDecorations(values?.faded ? this.faded : this.fresh, decorations);
         editor.setDecorations(values?.faded ? this.fresh : this.faded, []);
     }
-    /** Lists every value of the `dbg` on the cursor's line, in order, to pick one to copy. */
+    /** Lists every value kept of the `dbg`, or else the shown value, on the cursor's line, in order, to pick one to copy. */
     async showValues() {
         const editor = vscode.window.activeTextEditor;
         const values = editor && this.files.get(editor.document.uri.fsPath);
         const line = editor ? editor.selection.active.line + 1 : 0;
-        const index = values ? values.places.findIndex((place) => place?.line === line) : -1;
-        if (!values || index < 0) {
-            void vscode.window.showInformationMessage("No dbg on this line has values from a run.");
+        const onLine = values ? values.sites.filter((_, index) => values.places[index]?.line === line) : [];
+        const site = onLine.find((found) => found.kind === "dbg") ?? onLine[0];
+        if (!site) {
+            void vscode.window.showInformationMessage("No dbg or value on this line has values from a run.");
             return;
         }
-        const site = values.sites[index];
-        const picked = await vscode.window.showQuickPick(site.values.map((value, position) => ({ label: `${position + 1}.`, description: (0, dbgValues_1.oneLine)(value, 200), value })), { title: `dbg values, in the order they came (${site.values.length})`, matchOnDescription: true });
+        const first = (0, dbgValues_1.firstKept)(site);
+        const kept = first === 1 ? "" : `, the last ${site.values.length} kept`;
+        const picked = await vscode.window.showQuickPick(site.values.map((value, position) => ({ label: `${first + position}.`, description: (0, dbgValues_1.oneLine)(value, 200), value })), { title: `${site.kind === "value" ? "Values" : "dbg values"}, in the order they came (${site.count}${kept})`, matchOnDescription: true });
         if (picked) {
             await vscode.env.clipboard.writeText(picked.value);
             void vscode.window.showInformationMessage("Copied the value.");

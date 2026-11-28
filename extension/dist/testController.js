@@ -162,7 +162,7 @@ class TestExplorer {
      * Runs what `request` chooses, a run of `nanyx test` for each package or script it chooses from, and gives how many
      * of its tests passed and how many didn't.
      */
-    async run(request, token) {
+    async run(request, token, filesInMemory = false) {
         const executable = this.compiler();
         const run = this.controller.createTestRun(request);
         const counts = { passed: 0, failed: 0 };
@@ -177,7 +177,7 @@ class TestExplorer {
                 }
                 const root = this.roots.get(id);
                 if (root) {
-                    await this.runRoot(executable, run, root, chosen, token, counts);
+                    await this.runRoot(executable, run, root, chosen, token, counts, filesInMemory);
                 }
             }
         }
@@ -205,7 +205,7 @@ class TestExplorer {
     }
     /**
      * Runs the tests written in `file`, a full path, as live mode does on a save, as they were last listed: in the Testing
-     * view, their `dbg` values shown in the editor. Gives how many passed and how many didn't, or none when the file has
+     * view, an `#io` test's files in memory, and their `dbg` values shown in the editor. Gives how many passed and how many didn't, or none when the file has
      * no tests.
      */
     async liveRun(file, token) {
@@ -214,7 +214,7 @@ class TestExplorer {
             return undefined;
         }
         const items = found.names.map((name) => this.itemOf(found.root, name)).filter((item) => item !== undefined);
-        return this.run(new vscode.TestRunRequest(items), token);
+        return this.run(new vscode.TestRunRequest(items), token, true);
     }
     /** The items `request` chooses, by the root they are in: every root when it chooses none. */
     chosenByRoot(request) {
@@ -231,7 +231,7 @@ class TestExplorer {
         return chosen;
     }
     /** Runs the items `chosen` of `root` in `run`, each test's result shown as its object arrives. */
-    async runRoot(executable, run, root, chosen, token, counts) {
+    async runRoot(executable, run, root, chosen, token, counts, filesInMemory) {
         const rootChosen = chosen.some((item) => item.id === (0, tests_1.rootId)(root.target));
         const chosenModules = root.modules.filter((module) => chosen.some((item) => item.id === (0, tests_1.moduleId)(root.target, module.module))).map((module) => module.module);
         const chosenTests = root.modules.flatMap((module) => module.tests).filter((test) => chosen.some((item) => item.id === (0, tests_1.testId)(root.target, test.name))).map((test) => test.name);
@@ -243,7 +243,7 @@ class TestExplorer {
         items.forEach((item) => item && run.enqueued(item));
         // The values of the tests' dbgs replace those of the run before, in each file they reach.
         const dbgRun = this.dbg.beginRun();
-        const process = (0, child_process_1.spawn)(executable, (0, tests_1.runArguments)(root.target, selection), { cwd: root.directory });
+        const process = (0, child_process_1.spawn)(executable, (0, tests_1.runArguments)(root.target, selection, filesInMemory), { cwd: root.directory });
         const cancelled = token.onCancellationRequested(() => process.kill());
         const diagnostics = [];
         const splitter = new tests_1.LineSplitter();

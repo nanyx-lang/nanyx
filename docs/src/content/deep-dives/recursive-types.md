@@ -40,13 +40,17 @@ holds such a type, which would otherwise never end, and how the WebAssembly back
 
 # Compiling
 
-- **The backend unfolds a recursive type into `IrRecursive`.** `CoreIrLowerTypes.toIrTypeIn` lowers a reference to a
-  recursive type to `IrRecursive` of what it stands for, and a reference met again inside it, the same body at the same
-  arguments, to `IrSelf` of how many recursive types out it is: `IrSelf 0` the innermost. A member of a group lowers in
-  the same way, so `Expr` in a group with `Statement` is `IrRecursive` of a record that holds a list of
-  `IrRecursive` of `Statement`'s record, in which `Expr` is `IrSelf 1`.
-- **Code that reads what a value is made of reads `IrType.unfold`.** It replaces each `IrSelf` that stands for the type
-  with the type itself, so the parts of a value are typed without free `IrSelf`s, and a value of a recursive type is
-  laid out as its body is.
+- **The backend lowers a recursive type to a group, `IrRecursive(selected, bodies)`.** `CoreIrLowerTypes.toIrTypeIn`
+  lowers a reference to a recursive type to the IR types of its group at the arguments its definitions name each other
+  with (`recursiveGroup`): `Expr` in a group with `Statement` is a group of `Expr`'s record and `Statement`'s, with
+  `selected` saying which is `Expr`. A type that names only itself is a group of one. A reference met again inside a
+  body, the same definition at the same arguments, is `IrSelf(depth, groupMember)`: how many groups out it is, 0 the
+  innermost, and where it is in that group. The group's types are in the order of their positions in the checker's
+  group and then of their arguments, so a group is the same IR type whichever of its types it is reached from, and
+  each type is lowered once, however many paths through the group lead to it (#3209).
+- **Code that reads what a value is made of reads `IrType.unfold`.** It gives the selected body, with each `IrSelf` that
+  stands for a type of its group that type, so the parts of a value are typed without free `IrSelf`s, and a value of a
+  recursive type is laid out as its body is. A group's name in WebAssembly is a hash of its bodies, with which of them
+  it is (`IrType.mangle`), so that each of its types' names isn't as long as all of them.
 - **A type that holds itself at other arguments isn't compiled.** `#node(T(list(a)))` inside `T(a)` would need ever
-  more types, so `toIrTypeIn` reports `NYX0301` after eight levels of it.
+  more types, so `toIrTypeIn` reports `NYX0301` once a group reaches 64 types, or eight levels of groups of one.

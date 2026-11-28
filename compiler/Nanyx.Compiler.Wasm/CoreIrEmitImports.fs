@@ -43,3 +43,6 @@ let probeCall = "__nanyx_probe"
 let probeLocal = "__nanyx_probe_local"
 /// `dbg`, which a module the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
 let dbgImport = "__nanyx_dbg"
+/// `value`, which a module built with `--show-values` gives each value it shows to, from `nanyx:debug`, as it gives a
+/// `dbg` to `dbg` (see `ShownValues`).
+let valueImport = "__nanyx_value"

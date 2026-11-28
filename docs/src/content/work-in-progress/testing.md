@@ -151,8 +151,8 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 ones named ([#3099](https://github.com/nanyx-lang/nanyx/issues/3099)). Built on them
 ([#3100](https://github.com/nanyx-lang/nanyx/issues/3100)): the VS Code extension fills the editor's test explorer from
 `nanyx test --list --format json`, runs a test, a module or a package, shows each result at the place it failed, and
-puts a **Run test** link above each `@test` ([VS Code extension](../standard-tools/vs-code-extension#testing)). Live mode re-runs a saved file's tests too, but its `#io` tests only once it is turned on for
-the file's script or package ([#3157](https://github.com/nanyx-lang/nanyx/issues/3157),
+puts a **Run test** link above each `@test` ([VS Code extension](../standard-tools/vs-code-extension#testing)). Live mode re-runs a saved file's tests too, an `#io` test's files in memory over the real ones
+([#3157](https://github.com/nanyx-lang/nanyx/issues/3157), [#3195](https://github.com/nanyx-lang/nanyx/issues/3195),
 [Live mode](../standard-tools/vs-code-extension#live-mode)). The tests of the modules that import the saved file aren't
 re-run: knowing them needs the package's imports, which the listing doesn't give.
 

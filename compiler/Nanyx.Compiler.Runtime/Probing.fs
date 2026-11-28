@@ -11,13 +11,15 @@ type IProbeListener =
     /// A local of the frame of the last probe, by its name, written as `dbg` writes values.
     abstract Local: name: string * text: string -> unit
 
-/// A `dbg` a debug build reached: where it is written, its line and column counted from 1, and the value's text, as
-/// `dbg`'s printer wrote it.
+/// A `dbg` a debug build reached: where it is written, its line and column counted from 1, the value's text, as
+/// `dbg`'s printer wrote it, and whether it is a value `nanyx run --show-values` shows rather than a `dbg` the program
+/// writes.
 type DbgHit =
     { File: string
       Line: int
       Column: int
-      Text: string }
+      Text: string
+      Shown: bool }
 
     /// `[main.nyx:12] 84`, as a program writes it itself (see `Transpiler.Wasm.CoreIr.DbgSite`).
     override this.ToString() =
@@ -87,10 +89,13 @@ module Probing =
     /// whether it has dealt with it: when it hasn't, the program writes it to its own stderr, as a module that another
     /// runtime runs, without the import, does. The console runner leaves it to the program, so that it keeps its place
     /// among what else the program writes there; the HTTP server writes it to its log, with the request it came from.
+    /// It defines `value` too, which a program built to show its values (see `Transpiler.Wasm.ShownValues`) calls as it
+    /// does `dbg` at each value it shows.
     let defineDbg (linker: Linker) (handle: DbgHit -> bool) =
-        linker.DefineFunction(
-            moduleName,
-            "dbg",
+        let hit (shown: bool) =
             CallerFunc<int, int, int, int, int>(fun caller file line column text ->
                 let memory = caller.GetMemory "memory"
-                if handle { File = stringAt memory file; Line = line; Column = column; Text = stringAt memory text } then 1 else 0))
+                let hit = { File = stringAt memory file; Line = line; Column = column; Text = stringAt memory text; Shown = shown }
+                if handle hit then 1 else 0)
+        linker.DefineFunction(moduleName, "dbg", hit false)
+        linker.DefineFunction(moduleName, "value", hit true)

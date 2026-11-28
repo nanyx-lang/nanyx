@@ -39,6 +39,7 @@ exports.isOn = isOn;
 exports.testsOn = testsOn;
 exports.liveArguments = liveArguments;
 exports.heldBackBy = heldBackBy;
+exports.showRow = showRow;
 exports.rowsOf = rowsOf;
 exports.endedText = endedText;
 const fs = __importStar(require("fs"));
@@ -78,29 +79,36 @@ function isOn(info, setting) {
     return setting ?? info.offered;
 }
 /**
- * Whether a file's tests re-run on a save: as the user set it for its script or package, or else on where none of them
- * is `@test(#io)`, since every other test runs with its files and its environment its own.
+ * Whether a file's tests re-run on a save: as the user set it for its script or package, or else on. Every test is safe
+ * to re-run: one that isn't `#io` has its own `Console`, and a live run keeps an `#io` test's files in memory (`nanyx test
+ * --files-in-memory`), its `Env` only read and its `Console` its own output.
  */
 function testsOn(tests, setting) {
     if (!tests || tests.count === 0) {
         return false;
     }
-    return setting ?? tests.io === 0;
+    return setting ?? true;
 }
-/** The arguments of `nanyx run` for a live run of `target`, its `dbg`s written to `dbgTo`. */
-function liveArguments(target, dbgTo) {
-    return ["run", "--dbg-to", dbgTo, "--files-in-memory", target];
+/** The arguments of `nanyx run` for a live run of `target`, its `dbg`s written to `dbgTo`, and every value with `every`. */
+function liveArguments(target, dbgTo, show = "dbg") {
+    return ["run", "--dbg-to", dbgTo, ...(show === "every" ? ["--show-values"] : []), "--files-in-memory", target];
 }
 /** The contexts that hold live mode back until it is turned on: those `info`'s entry point requires beyond the offered ones. */
 function heldBackBy(info) {
     const offered = new Set(["Async", "Console", "FileSystem"]);
     return info.contexts.filter((context) => !offered.has(context));
 }
+/** The sidebar's row that says what a live run shows, `show`, which switches it. */
+function showRow(show) {
+    return show === "every"
+        ? { label: "Shows every value", description: "each def and statement", tooltip: "A live run shows every value its code binds or gives, as = 84 at the end of its line (nanyx run --show-values). Switch to show only what dbg writes." }
+        : { label: "Shows dbg values", description: "what dbg writes", tooltip: "A live run shows what each dbg writes, as ▸ 84 at the end of its line. Switch to show every value its code binds or gives." };
+}
 /**
- * What the sidebar says of `target`, whose entry point is `info`, run live when `on`, and of the tests of its active
- * file, `tests`, re-run when `testsAreOn`.
+ * What the sidebar says of `target`, whose entry point is `info`, run live when `on` showing `show`, and of the tests
+ * of its active file, `tests`, re-run when `testsAreOn`.
  */
-function rowsOf(target, info, on, tests, testsAreOn = false) {
+function rowsOf(target, info, on, tests, testsAreOn = false, show = "dbg") {
     const hasEntry = info !== undefined && info.entry !== null;
     const hasTests = tests !== undefined && tests.count > 0;
     if (!hasEntry && !hasTests) {
@@ -121,7 +129,7 @@ function rowsOf(target, info, on, tests, testsAreOn = false) {
         }
     ];
     if (hasEntry) {
-        rows.push({
+        rows.push(showRow(show), {
             label: "Needs",
             description: info.contexts.length > 0 ? info.contexts.join(", ") : "no contexts",
             tooltip: "The contexts the entry point requires, from its type."
@@ -154,11 +162,9 @@ function rowsOf(target, info, on, tests, testsAreOn = false) {
         });
         if (tests.io > 0) {
             rows.push({
-                label: testsAreOn ? "Runs for real" : "Held back",
-                description: `${tests.io} #io test${tests.io === 1 ? "" : "s"}`,
-                tooltip: testsAreOn
-                    ? "A @test(#io) test runs with the real files and environment, as nanyx test runs it."
-                    : `A @test(#io) test uses the real files and environment, so a re-run on every save would too: turn live mode on for this ${target.kind} to run them anyway.`
+                label: "Files are in memory",
+                description: `for ${tests.io} #io test${tests.io === 1 ? "" : "s"} too`,
+                tooltip: "A @test(#io) test reads the real files, and keeps what it writes, appends, makes and deletes in memory (nanyx test --files-in-memory)."
             });
         }
     }

@@ -74,6 +74,49 @@ let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
     | TyAlias(_, _, underlying) -> recursiveReference underlying
     | _ -> None
 
+/// What says which group of recursive types the closed definition `body` is of: the group's members, for a type of a
+/// group of types that name each other (see `TyGroup`), or the definition itself, for a type that names only itself.
+let private groupKey (body: Ty) : Ty =
+    match body with
+    | TyGroup(_, members) -> TyGroup(0, members)
+    | _ -> body
+
+/// Which of its group's types the closed definition `body` is: its position for a member of a group, and 0 for a type
+/// that names only itself.
+let private selectedIn (body: Ty) : int =
+    match body with
+    | TyGroup(selected, _) -> selected
+    | _ -> 0
+
+/// The references `ty` holds to a type of the group `key` (see `groupKey`), but for those inside such a reference: in the
+/// arguments of a reference to another recursive type, and anywhere else in the types it is made of.
+let rec private referencesIn (key: Ty) (ty: Ty) : Ty list =
+    match recursiveReference ty with
+    | Some(body, _) when groupKey body = key -> [ ty ]
+    | Some(_, args) -> args |> List.collect (referencesIn key)
+    | None -> Ty.children ty |> List.collect (referencesIn key)
+
+/// The types of the group of `ty`, a reference to a recursive type, at the arguments each is named with from `ty` and
+/// from one another, each by its definition and arguments (see `recursiveReference`), with what it stands for unfolded
+/// one level. They are in the order of their positions in the group and then of their arguments, so that a group is the
+/// same IR type whichever of its types it is reached from (see `IrRecursive`). A type that names only itself, at the
+/// arguments it has, is a group of one.
+let private recursiveGroup (ty: Ty) : ((Ty * Ty list) * Ty) list =
+    let key = groupKey (fst (recursiveReference ty).Value)
+    let rec grow (found: ((Ty * Ty list) * Ty) list) (pending: Ty list) =
+        match pending with
+        | [] -> found
+        | next :: rest ->
+            let reference = (recursiveReference next).Value
+            if found |> List.exists (fst >> (=) reference) then
+                grow found rest
+            elif found.Length >= 64 then
+                cannot "a recursive type that holds itself at other type arguments"
+            else
+                let unfolded = RecursiveNominals.underlying (Unifier.unalias next)
+                grow (found @ [ reference, unfolded ]) (rest @ referencesIn key unfolded)
+    grow [] [ ty ] |> List.sortBy (fun ((body, args), _) -> selectedIn body, args |> List.map Unifier.tyToString |> String.concat ", ")
+
 /// `ty` without the contexts its function types require, to compare types as values alone.
 let rec private withoutContexts (ty: Ty) : Ty =
     match ty with
@@ -231,17 +274,22 @@ let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpandi
 
 /// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
 /// none of its members, so that a context whose member requires the context itself has an IR type. `recursing` is the
-/// recursive aliases `ty` is inside, innermost first, each by its definition and arguments: one of them again is
-/// `IrSelf` of where it is among them.
-and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (recursing: (Ty * Ty list) list) (ty: Ty) : IrType =
+/// groups of recursive types `ty` is inside, innermost first, each its types by their definitions and arguments: one of
+/// them again is `IrSelf` of where its group is among them and where it is in its group.
+and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (recursing: (Ty * Ty list) list list) (ty: Ty) : IrType =
     let toIrType = toIrTypeExpanding layouts expanding recursing
     match recursiveReference ty with
-    // A recursive type it is inside, the innermost `IrSelf 0`.
-    | Some reference when recursing |> List.contains reference -> IrSelf(recursing |> List.findIndex ((=) reference))
+    // A recursive type it is inside, the innermost group's at depth 0.
+    | Some reference when recursing |> List.exists (List.contains reference) ->
+        let depth = recursing |> List.findIndex (List.contains reference)
+        IrSelf(depth, recursing.[depth] |> List.findIndex ((=) reference))
     // A type that holds itself at other arguments, such as `#node(T(list(a)))` in `T(a)`, holds ever more types.
-    | Some reference when (recursing |> List.filter (fst >> (=) (fst reference)) |> List.length) > 8 ->
+    | Some(body, _) when (recursing |> List.filter (List.exists (fst >> groupKey >> (=) (groupKey body))) |> List.length) > 8 ->
         cannot "a recursive type that holds itself at other type arguments"
-    | Some reference -> IrRecursive(toIrTypeExpanding layouts expanding (reference :: recursing) (RecursiveNominals.underlying (Unifier.unalias ty)))
+    | Some reference ->
+        let group = recursiveGroup ty
+        let frame = group |> List.map fst
+        IrRecursive(frame |> List.findIndex ((=) reference), group |> List.map (snd >> toIrTypeExpanding layouts expanding (frame :: recursing)))
     | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt

@@ -1,0 +1,242 @@
+--| The data that crosses between the compiler and a linter: the module it checks, the answers to its
+  questions, and its reports.
+
+  The compiler writes data in a binary form of its own (`LintData`, in the compiler), which
+  [`readAt`] reads from the module's memory and [`writeAt`] writes. [`fromData`] makes a value of
+  any of `nanyx.analysis`'s types from data, and [`toData`] data from one, through the type's
+  description, matching a record's fields and a union's tags by name, so that nothing is written by
+  hand for each kind of node.
+module analysis.data
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
+
+--| A value as it crosses: a record's fields by name, a tuple's by position (`0`, `1`, ...), and a
+  tag with its payload, `#unit` for a tag without one.
+export type Data =
+  | #int(int)
+  | #float(float)
+  | #text(string)
+  | #bool(bool)
+  | #unit
+  | #list(list(Data))
+  | #record(list((string, Data)))
+  | #tag(string, Data)
+
+--| `address` moved on by `bytes`.
+def offset: I32, int -> I32 = { address, bytes ->
+  I32.wrappingAdd(address, I32.fromInt(bytes))
+}
+
+--| The text at `address`, its length in 4 bytes then its UTF-8, with the address after it.
+def textAt: [HostRuntime] I32 -> (string, I32) = { address ->
+  def length = readI32(address)
+  (stringAt(offset(address, 4), length), offset(address, 4 + I32.toInt(length)))
+}
+
+--| The data at `address`, in the binary form the compiler writes, with the address after it.
+export def readAt: [HostRuntime] I32 -> (Data, I32) = { address ->
+  def next = offset(address, 1)
+
+  match I32.toInt(readByte(address))
+    | 0 -> (#int(readI64(next)), offset(next, 8))
+    | 1 ->
+      def (text, after) = textAt(next)
+
+      match float.fromString(text)
+        | #some(x) -> (#float(x), after)
+        | #invalidFloat -> crash("The compiler gave '{text}' as a float")
+    | 2 ->
+      def (text, after) = textAt(next)
+      (#text(text), after)
+    | 3 -> (#bool(I32.toInt(readByte(next)) != 0), offset(next, 1))
+    | 4 -> (#unit, next)
+    | 5 ->
+      def (items, after) = readItems(I32.toInt(readI32(next)), offset(next, 4), [])
+      (#list(items), after)
+    | 6 ->
+      def (fields, after) = readFields(I32.toInt(readI32(next)), offset(next, 4), [])
+      (#record(fields), after)
+    | 7 ->
+      def (name, payloadAt) = textAt(next)
+      def (payload, after) = readAt(payloadAt)
+      (#tag(name, payload), after)
+    | kind -> crash("The compiler gave data that starts with the byte {kind}")
+}
+
+--| The `count` values at `address`, after those in `read`, with the address after them.
+def readItems: [HostRuntime] int, I32, list(Data) -> (list(Data), I32) = { count, address, read ->
+  if count == 0 then
+    (list.reverse(read), address)
+  else
+    def (item, after) = readAt(address)
+    readItems(count - 1, after, [item, ...read])
+}
+
+--| The `count` named values at `address`, after those in `read`, with the address after them.
+def readFields
+  : [HostRuntime] int, I32, list((string, Data)) -> (list((string, Data)), I32)
+  = { count, address, read ->
+    if count == 0 then
+      (list.reverse(read), address)
+    else
+      def (name, valueAt) = textAt(address)
+      def (value, after) = readAt(valueAt)
+      readFields(count - 1, after, [(name, value), ...read])
+  }
+
+--| The number of bytes `data` takes in its binary form.
+export def sizeOf: Data -> int = {
+  | #int(_) -> 9
+  | #float(x) -> 5 + string.length("{x}")
+  | #text(s) -> 5 + string.length(s)
+  | #bool(_) -> 2
+  | #unit -> 1
+  | #list(items) -> 5 + list.sum(list.map(items, sizeOf))
+  | #record(fields) -> 5 + list.sum(
+    list.map(fields, { field -> 4 + string.length(field.0) + sizeOf(field.1) })
+  )
+  | #tag(name, payload) -> 5 + string.length(name) + sizeOf(payload)
+}
+
+--| Copies the `count` bytes at `from` to `to`.
+def copyBytes: [HostRuntime] I32, I32, int -> () = { from, to, count ->
+  if count > 0 then
+    writeByte(to, readByte(from))
+    copyBytes(offset(from, 1), offset(to, 1), count - 1)
+}
+
+--| Writes `text`, its length in 4 bytes then its UTF-8, at `address`, and gives the address after it.
+def writeText: [HostRuntime] I32, string -> I32 = { address, text ->
+  def length = string.length(text)
+  writeI32(address, I32.fromInt(length))
+  copyBytes(addressOf(text), offset(address, 4), length)
+  keepAlive(text)
+  offset(address, 4 + length)
+}
+
+--| Writes `data` in its binary form at `address`, which has room for [`sizeOf`] it, and gives the
+  address after it.
+export def writeAt: [HostRuntime] I32, Data -> I32 = { address, data ->
+  def next = offset(address, 1)
+
+  match data
+    | #int(n) ->
+      writeByte(address, 0)
+      writeI64(next, n)
+      offset(next, 8)
+    | #float(x) ->
+      writeByte(address, 1)
+      writeText(next, "{x}")
+    | #text(s) ->
+      writeByte(address, 2)
+      writeText(next, s)
+    | #bool(b) ->
+      writeByte(address, 3)
+      writeByte(next, if b then 1 else 0)
+      offset(next, 1)
+    | #unit ->
+      writeByte(address, 4)
+      next
+    | #list(items) ->
+      writeByte(address, 5)
+      writeI32(next, I32.fromInt(list.length(items)))
+      list.fold(items, offset(next, 4), { at, item -> writeAt(at, item) })
+    | #record(fields) ->
+      writeByte(address, 6)
+      writeI32(next, I32.fromInt(list.length(fields)))
+      list.fold(fields, offset(next, 4), { at, field -> writeAt(writeText(at, field.0), field.1) })
+    | #tag(name, payload) ->
+      writeByte(address, 7)
+      writeAt(writeText(next, name), payload)
+}
+
+--| The error for data that isn't a value of the type it is read as.
+def mismatch: Data -> #some(a) | #error(string) = { data ->
+  #error("{data} isn't of the type it is read as")
+}
+
+--| The value of the type `t` that `data` is, or why it isn't one: a record's fields are found by name,
+  and a union's tags.
+export def fromData: Type(a), Data -> #some(a) | #error(string) = { t, data ->
+  match t
+    | #int ->
+      match data
+        | #int(n) -> #some(n)
+        | _ -> mismatch(data)
+    | #float ->
+      match data
+        | #float(x) -> #some(x)
+        | _ -> mismatch(data)
+    | #string ->
+      match data
+        | #text(s) -> #some(s)
+        | _ -> mismatch(data)
+    | #bool ->
+      match data
+        | #bool(b) -> #some(b)
+        | _ -> mismatch(data)
+    | #unit -> #some()
+    | #list(elem) ->
+      match data
+        | #list(items) -> fromItems(elem, items, [])
+        | _ -> mismatch(data)
+    | #record(r) ->
+      match data
+        | #record(fields) ->
+          r.build { f ->
+            match list.find(fields, { field -> field.0 == f.name })
+              | #some(field) -> fromData(f.type, field.1)
+              | #notFound -> #error("{data} has no field '{f.name}'")
+          }
+        | _ -> mismatch(data)
+    | #union(u) ->
+      match data
+        | #tag(name, payload) ->
+          match list.find(u.cases, { c -> c.name == name })
+            | #some(c) ->
+              match fromData(c.type, payload)
+                | #some(value) -> #some(c.build(value))
+                | #error(e) -> #error(e)
+            | #notFound -> #error("#{name} isn't a tag of the type it is read as")
+        | _ -> mismatch(data)
+    | else -> #error("a value of this type can't be read from data")
+}
+
+--| The values of the type `elem` that `items` are, after those in `read`.
+def fromItems
+  : Type(e), list(Data), list(e) -> #some(list(e)) | #error(string)
+  = { elem, items, read ->
+    match items
+      | [] -> #some(list.reverse(read))
+      | [item, ...rest] ->
+        match fromData(elem, item)
+          | #some(value) -> fromItems(elem, rest, [value, ...read])
+          | #error(e) -> #error(e)
+  }
+
+--| `value`, of the type `t`, as data: a record's fields by name, and a union's value as its tag.
+export def toData: a, Type(a) -> Data = { value, t ->
+  match t
+    | #int -> #int(value)
+    | #float -> #float(value)
+    | #string -> #text(value)
+    | #bool -> #bool(value)
+    | #unit -> #unit
+    | #list(elem) -> #list(list.map(value, { item -> toData(item, elem) }))
+    | #record(r) -> #record(list.map(r.fields, { f -> (f.name, toData(f.get(value), f.type)) }))
+    | #union(u) -> caseData(value, u.cases)
+    | else -> #unit
+}
+
+--| `value` as the tag of the first of `cases` it is.
+def caseData: a, list(Case(a)) -> Data = { value, cases ->
+  match cases
+    | [] -> #unit
+    | [c, ...rest] ->
+      match c.get(value)
+        | #some(payload) -> #tag(c.name, toData(payload, c.type))
+        | #none -> caseData(value, rest)
+}

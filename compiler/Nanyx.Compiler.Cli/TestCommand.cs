@@ -26,6 +26,7 @@ internal static partial class CliCommands
     /// <param name="list">List the tests that would run, each with where it is written, and run none.</param>
     /// <param name="test">Run only the test of this full name, as the report writes it, geometry.`adds points`; several, one on each line. A name that names no test is an error.</param>
     /// <param name="module">Run only the tests of the module of this name. A name that names no module with tests is an error.</param>
+    /// <param name="filesInMemory">Run each @test(#io) test with its files in memory, over the real ones: it reads the real files, and nothing it writes, appends, makes or deletes reaches the disk. The tests are built from the test host's root for this.</param>
     [Consolo("test")]
     public static int Test(
         [Consolo("filter")] string? filter = null,
@@ -37,11 +38,12 @@ internal static partial class CliCommands
         [Consolo("list")] bool list = false,
         [Consolo("test")] string? test = null,
         [Consolo("module")] string? module = null,
+        [Consolo("files-in-memory")] bool filesInMemory = false,
         params string[] path) =>
-        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format, list, test, module);
+        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format, list, test, module, filesInMemory);
 
     /// <summary>What <c>nanyx test</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null, bool list = false, string? test = null, string? module = null)
+    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null, bool list = false, string? test = null, string? module = null, bool filesInMemory = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -111,7 +113,7 @@ internal static partial class CliCommands
             packageRoot = null;
             directory = Path.GetDirectoryName(shell.FullPath(single))!;
             using var progress = CompileProgress.Start(shell.Error, $"{name} tests", shell.DisplayPath, timings);
-            var built = Script.testBuild(shell.Packages, progress.Listener, shell.FullPath(single), File.ReadAllText(shell.FullPath(single)));
+            var built = Script.testBuild(shell.Packages, progress.Listener, filesInMemory, shell.FullPath(single), File.ReadAllText(shell.FullPath(single)));
             progress.Finish();
             if (built.IsError)
             {
@@ -140,7 +142,7 @@ internal static partial class CliCommands
                 return failed;
             }
 
-            var built = PackageModule.testBuild(shell.Packages, package);
+            var built = PackageModule.testBuild(shell.Packages, filesInMemory, package);
             if (built.IsError)
             {
                 shell.Error.WriteLine($"error: the test host can't be read: {built.ErrorValue}");
@@ -195,7 +197,7 @@ internal static partial class CliCommands
 
         // As nanyx run compiles a program, without debug probes, which nothing listens to; the test build gives its dbgs
         // and crashes to the runtime itself (see TestBuild.assemble).
-        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(packageRoot), true, false, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
+        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(packageRoot), true, false, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false, showValuesIn: Microsoft.FSharp.Collections.FSharpList<string>.Empty);
         var wasm = TestBuild.assemble(options, root.Value.Typed.Value);
         var chosenSeed = givenSeed ?? Random.Shared.NextInt64();
         var tests = TestTable.read(wasm);
