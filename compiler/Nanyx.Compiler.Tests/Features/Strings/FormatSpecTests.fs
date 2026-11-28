@@ -82,7 +82,7 @@ def s = "{36.0km / 1hr:.1f km*hr}"
     let code, message, at = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.BadFormatSpec.Code, code)
     Assert.Equal("k", at)
-    Assert.Equal("'.1f km*hr' is no format spec for a 'Length(float) / Time(float)': at 4, it could have units that make Length / Time: `km*hr` makes Time * Length", message)
+    Assert.Equal("'.1f km*hr' is no format spec for a 'Length(float) / Time(float)': at 4, it could have units that make Length / Time: `km*hr` makes Length * Time", message)
 
 [<Fact>]
 let ``A spec for a type variable's value, or a type of the program's own, is left to the program as it runs`` () =
