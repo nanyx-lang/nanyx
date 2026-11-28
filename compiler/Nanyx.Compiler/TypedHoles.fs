@@ -24,11 +24,11 @@ type Candidate =
       Own: bool }
 
 /// What the pass reads of an inferred module: each expression's type and each call's callee type, by node, both
-/// resolved, and the names the module can write.
+/// resolved, and the names the module can write, made only for a module with a hole.
 type Typing =
     { TypeOf: NodeId -> Ty option
       CalleeOf: NodeId -> Ty option
-      Candidates: Candidate list }
+      Candidates: Lazy<Candidate list> }
 
 /// Whether a symbol of `kind` names a value, which can fill a hole.
 let private isValue (kind: SymbolKind) =
@@ -59,10 +59,10 @@ let private candidatesOf (symbols: Map<SymbolId, Symbol>) (scopes: Map<SymbolId,
 
 /// What the pass reads of a module just inferred to `state`, its types resolved by `subst`, with the names `env` imports.
 let ofInferState (state: InferState) (subst: Subst) (env: TypeEnv) : Typing =
-    let own =
+    let own () =
         candidatesOf state.Symbols state.Scopes (fun id -> state.SymbolTypes.TryFind id |> Option.map (Unifier.apply subst)) (fun _ -> true) state.AnnotatedSymbols.Contains
-    let ownNames = own |> List.map _.Name |> Set.ofList
-    let imported =
+    let imported (own: Candidate list) =
+        let ownNames = own |> List.map _.Name |> Set.ofList
         env.Names
         |> Map.toList
         |> List.filter (fun (name, _) -> not (ownNames.Contains name))
@@ -70,14 +70,14 @@ let ofInferState (state: InferState) (subst: Subst) (env: TypeEnv) : Typing =
             { Name = name; Type = scheme.Type; Kind = TopLevelValue; Declaration = SourceSpan.none; Scope = None; Annotated = false; Own = false })
     { TypeOf = fun id -> state.ExprTypes.TryFind id |> Option.map (Unifier.apply subst)
       CalleeOf = fun id -> state.CalleeTypes.TryFind id |> Option.map (Unifier.apply subst)
-      Candidates = own @ imported }
+      Candidates = lazy (let own = own () in own @ imported own) }
 
 /// What the pass reads of `typed`, the compiled root module, whose types are resolved.
 let ofTypedModule (typed: TypedModule) : Typing =
     let typeOf id = typed.SymbolTypes.TryFind id |> Option.orElseWith (fun () -> typed.ImportedTypes.TryFind id)
     { TypeOf = typed.ExprTypes.TryFind
       CalleeOf = typed.CalleeTypes.TryFind
-      Candidates = candidatesOf typed.Symbols typed.Scopes typeOf (typed.ImportedTypes.ContainsKey >> not) typed.AnnotatedSymbols.Contains }
+      Candidates = lazy (candidatesOf typed.Symbols typed.Scopes typeOf (typed.ImportedTypes.ContainsKey >> not) typed.AnnotatedSymbols.Contains) }
 
 /// A hole's expected type, and the code that would fill it, best first: a name, or a call that gives the type.
 type Hole = { Expected: Ty; Fills: string list }
@@ -132,7 +132,7 @@ let rec private expectedOf (typing: Typing) (child: Expression) (parents: Parent
     match parents with
     | [] -> None
     | InDef(name, true, declaredIn) :: _ ->
-        typing.Candidates
+        typing.Candidates.Value
         |> List.tryFind (fun candidate -> candidate.Annotated && candidate.Name = name && SourceSpan.contains declaredIn candidate.Declaration)
         |> Option.map _.Type
         |> settled
@@ -263,7 +263,7 @@ let private callText (name: Identifier) (input: Ty) =
 /// come first, the nearest local first, then imported ones, and then by name.
 let private fillsAt (typing: Typing) (around: Set<Identifier>) (at: SourceSpan) (expected: Ty) : string list =
     let inScope =
-        typing.Candidates
+        typing.Candidates.Value
         |> List.filter (fun candidate ->
             (candidate.Scope |> Option.forall (fun scope -> SourceSpan.contains scope at))
             && not (around.Contains candidate.Name)

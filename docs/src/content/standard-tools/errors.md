@@ -1208,10 +1208,12 @@ To fix it, move the definition into the block, or into a block of its own that t
 
 The program has `???`, which stands for code not written yet. It has the type `undefined`, which fits wherever a value
 of any type is expected, so the rest of the program can be checked, and nothing that uses it is another error. It cannot
-be run in a release build.
+be run in a release build. When the code around it says what type goes there, the error says so, and names what in
+scope would fit, each a quick fix in the editor
+([Unimplemented code](../getting-started/basics#unimplemented-code)).
 
 ```nanyx
-def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet
+def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet: an `int` goes here, such as `x`
 ```
 
 To fix it, write the code.
