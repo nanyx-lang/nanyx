@@ -18,6 +18,7 @@
     <Compile Include="Runner.fs" />
     <Compile Include="Serving.fs" />
     <Compile Include="Testing.fs" />
+    <Compile Include="Linting.fs" />
     <Compile Include="Componentizer.fs" />
   </ItemGroup>
 

@@ -319,6 +319,7 @@
     <Compile Include="Features\Workflows\RunSequenceTests.fs" />
     <Compile Include="Features\Workflows\RunSequenceForTests.fs" />
     <Compile Include="Features\Tests\TestBuildTests.fs" />
+    <Compile Include="Features\Linters\RunLintBuildTests.fs" />
     <Compile Include="Features\Tests\RunTestsTests.fs" />
     <Compile Include="Features\Tests\TestCommandTests.fs" />
     <Compile Include="Features\Tests\ExpectedCrashTests.fs" />

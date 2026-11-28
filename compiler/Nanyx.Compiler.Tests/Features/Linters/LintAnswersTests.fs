@@ -147,3 +147,59 @@ let ``Reports given back as data become the linter's diagnostics`` () =
     let fix = Assert.Single(found.Fixes)
     Assert.Equal("uno", (Assert.Single(fix.Edits)).NewText)
     Assert.Equal(Error "Its report at position 0 isn't a `Report`", LintAnswers.reports "" (DList [ DRecord [ "rule", DText "found" ] ]))
+
+[<Fact>]
+let ``The other questions about nodes are answered from the module's side tables`` () =
+    let source = "import nanyx/math as m\n\n--| The answer.\ndef answer = 42\n\ndef root = m.sqrt(16.0)\n\ndef names = [\"a\"] \\list.map { s -> s }\n"
+    let answers, _ =
+        asking source (fun answer ->
+            let tree = answer (ask "module" DUnit)
+            let valueOf index = item index tree |> get "kind" |> payloadOf "def" |> get "value"
+            let root = valueOf 2
+            let pipe = valueOf 3
+            [ "source", answer (ask "source" DUnit)
+              "calleeTypeOf", answer (ask "calleeTypeOf" (DInt(idOf root)))
+              "symbolOf", answer (ask "symbolOf" (DInt(idOf root)))
+              "importOf", answer (ask "importOf" (DInt(idOf root)))
+              "redundantTypeName", answer (ask "redundantTypeName" (DInt(idOf pipe)))
+              "lowered", answer (ask "lowered" (DInt(idOf root)))
+              "docComments", answer (ask "docComments" DUnit) ]
+            |> Map.ofList, [])
+    Assert.Equal(DText source, answers.["source"])
+    match answers.["calleeTypeOf"] with
+    | DTag("some", DTag("function", callee)) -> Assert.Equal(DTag("primitive", DText "float"), get "output" callee)
+    | other -> failwith $"%A{other}"
+    let sqrt = answers.["symbolOf"] |> payloadOf "some"
+    Assert.Equal(DText "sqrt", get "name" sqrt)
+    // Declared in another module, so nowhere in this one.
+    Assert.Equal(DTag("none", DUnit), get "declaration" sqrt)
+    Assert.Equal(DText "m", answers.["importOf"] |> payloadOf "some" |> get "name")
+    Assert.Equal(DBool true, answers.["redundantTypeName"])
+    Assert.Equal(DList [], answers.["lowered"])
+    let comment = answers.["docComments"] |> item 0
+    Assert.Equal(DText "The answer.", get "text" comment)
+    Assert.Equal("declaration", (match get "documents" comment with DTag(name, _) -> name | other -> $"%A{other}"))
+
+[<Fact>]
+let ``A symbol, its type and the contexts it requires are answered by its id`` () =
+    let answers, _ =
+        asking "context Log = (log: string -> ())\n\ndef greet: [Log] string -> () = { name -> log(name) }\n" (fun answer ->
+            let tree = answer (ask "module" DUnit)
+            let call = item 1 tree |> get "kind" |> payloadOf "def" |> get "value" |> get "kind" |> payloadOf "lambda" |> get "body"
+            let log = answer (ask "symbolOf" (DInt(idOf call))) |> payloadOf "some"
+            let greet =
+                match answer (ask "symbols" DUnit) with
+                | DList symbols -> symbols |> List.find (fun symbol -> get "name" symbol = DText "greet")
+                | other -> failwith $"%A{other}"
+            Assert.Equal(DTag("some", greet), answer (ask "symbol" (get "id" greet)))
+            [ "log", log
+              "typeOfSymbol", answer (ask "typeOfSymbol" (get "id" greet))
+              "contextsOf", answer (ask "contextsOf" (get "id" greet)) ]
+            |> Map.ofList, [])
+    Assert.Equal(DTag("contextMember", DUnit), get "kind" answers.["log"])
+    match answers.["typeOfSymbol"] with
+    | DTag("some", DTag("function", greet)) -> Assert.Equal(DTag("primitive", DText "unit"), get "output" greet)
+    | other -> failwith $"%A{other}"
+    match answers.["contextsOf"] with
+    | DList [ context ] -> Assert.Contains("Log", $"%A{context}")
+    | other -> failwith $"%A{other}"
