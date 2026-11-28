@@ -43,8 +43,10 @@ untouched. The [HTTP host](../advanced/hosts#the-http-host) runs each request in
 2. **Async in direct style:** the `Async` context, which is built, and structured concurrency, with no
    `async`/`await` keywords and no coloured functions.
 3. **Two levels of concurrency.** *Tasks* share an instance: cheap, and they crash together. *Processes* are
-   instances: isolated, and a crash in one is a value to the others.
-4. **`isolate` first, processes and supervision after,** as a package on top.
+   isolated, here or on another machine, and a crash in one is a value to the others. They come in three shapes: run
+   and stop, which is a task in another instance; stages, on channels; and servers and actors, which are called.
+4. **Design from the remote case down.** What can be sent, how a process fails and how it is addressed are decided for
+   processes on other machines; local processes, and `isolate`, are the smallest cases.
 
 # 1. Crash reports and a crash hook
 
@@ -199,7 +201,7 @@ Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspe
   sends into a bounded channel, and gives back a `seq` that reads the channel: `events(url) \seq.buffer(16)`. They
   need tasks and channels, so they come after the plain operators.
 - **Hot streams are processes.** Kotlin's `SharedFlow` and `StateFlow` run whether or not anyone is collecting and
-  have many subscribers. In Nanyx that's a [process](#processes-mailboxes-and-supervision) that subscribers register
+  have many subscribers. In Nanyx that's a [process](#3-tasks-and-processes) that subscribers register
   with, not a `seq`.
 - **Cancellation ends the sequence.** A waiting step in a cancelled task gets `#cancelled`, but a `seq`'s elements
   have nowhere to put it. Proposed: a pull in a cancelled task gives `#done`, so the sequence ends and a `for` loop over
@@ -208,22 +210,180 @@ Kotlin needs `Flow` beside `Sequence` because `Sequence`'s operators can't suspe
 
 # 3. Tasks and processes
 
+Nanyx has two levels of concurrency. *Tasks* share an instance: they're cheap, and they crash together. *Processes* are
+isolated: each has memory of its own, possibly on another machine, and a crash in one is a value to the others.
+
 | | Task | Process |
 |---|---|---|
-| Lives in | its parent's instance, on its own stack | its own instance |
-| Shares | memory with its siblings | nothing; values are copied in and out |
-| Costs | about a closure | an instance (microseconds, with Wasmtime's pooling allocator) and the copies |
-| On a crash | the whole instance goes down, its siblings too | it ends; the code that started it gets `#crashed(Crash)` |
-| Use for | waiting on many things at once | isolating something that may crash, and long-lived workers |
+| Lives in | its parent's instance, on its own stack | an instance of its own, here or on another machine |
+| Shares | memory with its siblings | nothing; what crosses is sent (below) |
+| Costs | about a closure | an instance (microseconds, with Wasmtime's pooling allocator) and the sends |
+| On a crash | the whole instance goes down, its siblings too | it ends, and its outcome says so |
+| Use for | waiting on many things at once | isolating something that may crash, workers, servers and actors |
 
 Tasks crashing together is what a structured scope does anyway: Trio cancels a nursery's other tasks when one fails.
-Isolation is opt-in and visible in the code, because it costs copying.
+Isolation is opt-in and visible in the code, because it costs an instance and copying.
 
-# 4. `isolate`, then processes
+The rest of this section is the design as discussed with the maintainer on 2026-11-27: proposals, not filed. Erlang-style
+processes and Orleans-style actors, which may run on other machines, are where it is meant to go, so it is designed from
+that case down, and the local cases are the smallest ones.
 
-## `isolate`: a crash boundary as a value
+## Three shapes
 
-The one primitive the rest is built on:
+A process takes input once, when it starts, or over time, and gives output once, when it ends, or over time:
+
+| | Output once | Output over time |
+|---|---|---|
+| **Input once** | run and stop | a producer: a `seq` filled from another instance |
+| **Input over time** | a consumer, or a fold | a stage, a server or an actor |
+
+That's a Unix process: arguments and an exit code, and stdin and stdout for anything long-lived. Most systems draw the
+same line in their libraries, over one primitive: Elixir's `Task` and `GenServer`, Kotlin's `async` and `actor`, Swift's
+`Task` and `actor`. Erlang has only the process; a task is a process that sends one message and stops.
+
+Nanyx gives users three shapes, each library code over one primitive, the process, which the host provides:
+
+- **Run and stop** is a task that runs in another instance. It has what a task has: `start!`, `await`, `race`,
+  cancellation and a scope. What differs is that what it captures must be sendable, and that its outcome can be a crash
+  or an unreachable machine as well as its value.
+- **A stage** is a step of a pipeline, between one input and one output: a parser between a socket and a handler, or
+  `seq.buffer` and `seq.merge` ([#1891](https://github.com/nanyx-lang/nanyx/issues/1891)) running elsewhere. It talks
+  over **channels**, one in and one out.
+- **A server or an actor** has many clients, each of which wants its own reply, which one shared output channel can't
+  route. It is **called**: a request goes in, and a typed reply comes back to the caller.
+
+## Every process ends with an outcome
+
+A long-lived process ends too: it stops, crashes, or its machine goes away, and a supervisor needs to know which. So
+every process has an outcome when it ends, as every Unix process has an exit code, and channels are an addition:
+
+```nanyx fragment
+type Exit(a) = #some(a) | #crashed(Crash) | #unreachable
+```
+
+A run-and-stop process's `await` gives its `Exit`. A stage or a server has one as well, which its owner sees.
+
+## Who owns a process's lifetime
+
+This is a second axis, apart from the shape:
+
+- **The caller's scope,** as for tasks today: the scope ends only when its processes have, so a crash's reach is visible
+  in the code. Run-and-stop processes and stages fit here.
+- **A supervisor,** which starts children, gets each one's outcome when it ends, and restarts it by a policy (one for one,
+  one for all), as OTP does. A supervisor is a process, and library code.
+- **The runtime,** for actors as Orleans has them: an actor exists by its key, is never started or stopped by the
+  program, and the runtime activates it, where it likes, when it is called.
+
+```nanyx fragment
+def main = supervise(strategy = #oneForOne, [
+  child("cache") { cache.run(capacity = 1000) },
+  child("worker") { worker.run() },
+])
+```
+
+`supervise` returns only when its children have stopped, so a supervisor's children are scoped too.
+
+## Calling a server or an actor
+
+There are two ways to write a call.
+
+**A typed message with a reply address,** as Gleam's OTP does. The protocol is a tag union, which is easy to send and to
+version, but every call builds a message, and a reply's type is tied to its request only by convention:
+
+```nanyx fragment
+type CounterMessage = #increment | #get(reply: Subject(int))
+
+def counter: [Process(CounterMessage)] int -> () = { count ->
+  match receive()
+    | #increment -> counter(count + 1)
+    | #get(reply) ->
+      reply \send(count)
+      counter(count)
+}
+
+def main = {
+  def c = process.start { counter(0) }
+  c \send(#increment)
+  println("{c \call { reply -> #get(reply) }}")
+}
+```
+
+**An interface,** a record of functions that the runtime gives a proxy for, as Orleans grain interfaces and Swift's
+distributed actors are. Calls read as calls, each reply's type is checked, and a call's failures are in each member's
+type:
+
+```nanyx fragment
+type CallError = #crashed(Crash) | #unreachable | #timedOut
+
+type Counter = (increment: [Async] () -> #ok | CallError, get: [Async] () -> #some(int) | CallError)
+
+def c: Counter = actors.get("counter-42")
+```
+
+Proposed: users write interfaces, and they are built on messages. An interface compiles to a tag union of requests, one
+case per member, each with a reply address of its member's type, and that union is what is sent. The client gets typed
+calls, the runtime one simple message format to send over the wire, and a router or a supervisor can still handle the
+messages themselves. A server's loop is a tail-recursive function, as in Erlang, its state its argument.
+
+# 4. What crosses a boundary
+
+What tasks and every shape of process need from the runtime is the same: memory of their own, values sent between
+memories, and an outcome as a value when one ends. These are decided for a process on another machine, the hardest case,
+so that a local process and `isolate` are smaller cases of the same rules, never ones that a remote process must narrow
+later.
+
+## Sendable types
+
+A value crosses to another instance by being copied, and to another machine by being written as bytes, for a build of
+the program that may be a different one. So which types can be sent is a property the compiler works out from a type,
+as it works out what can leave a scope:
+
+- **Data** (numbers, strings, records, tag unions, lists of them) can be sent anywhere.
+- **Values with a scoped context** (`[Memory]`, `[TaskScope]`: an `MRef`, an `MList`, a `Task`) can't be sent at all,
+  as they can't leave their scope. Shared mutable state between processes can't be written.
+- **Closures** are open (below). In one build, a closure's code is the same on both sides and only its captures need
+  copying. Between builds it isn't: Erlang fails with `badfun` when a fun is sent to a node with another version of its
+  module, Orleans sends no closures, only calls on interfaces, and Swift's distributed actors require every argument to
+  meet a serialization requirement (`Codable`).
+
+The copy and the bytes are generated code, as `==` and `dbg` are: the module knows its own layouts. A protected type's
+invariants survive, since its value is copied as it is, never rebuilt.
+
+## Failing remotely
+
+A call to another machine can fail when nothing crashed: the machine is unreachable, the network is split, or no reply
+comes in time. "A Note on Distributed Computing" (Waldo et al., 1994) argues that hiding that from callers breaks
+programs; Erlang hides it, and pays with a timeout on every `gen_server:call`, and every Orleans grain call can time out.
+So a process's outcome and a call's failures include `#unreachable`, and a call's `#timedOut`, from the start, even
+while every process is local.
+
+## Addressing and versions
+
+A process has an identity that can be sent, so that it can be given to other processes and mean the same on another
+machine. An actor is addressed by a key, not by a reference. And a cluster runs two builds at once during a deploy, so a
+protocol (a message union, or an interface's members) is a public API, and changing it is the same question the
+release's public API check asks of a package ([Releases](../deep-dives/releases#the-shipped-packages)).
+
+## Hosts own the mechanism, types own the meaning
+
+A context's type is its contract, and a host decides how to keep it, not what it means: the host decides where
+`println` goes, not what it does. So a host that provides processes decides whether each is a fresh instance or a warm
+one, a thread, a fiber or another machine, and its limits on fuel, memory and time. It doesn't decide that a process is
+something else.
+
+Services and actors aren't other meanings of one context:
+
+- **A service, or an Azure Functions-style function, is an entry point,** which hosts already own: what a program is,
+  who starts it and how long it lives is the shape of `@entry` and the host's `run`, as the
+  [HTTP host](../advanced/hosts#the-http-host) makes a program a request handler.
+- **Actors are a context of their own,** with a contract that says what an actor is. A library can provide it on
+  processes, for any host that has them, and an Orleans-style host can provide it natively, with real placement,
+  activation and persistence. A program written against it runs on either.
+
+## `isolate`
+
+`isolate` is the smallest case: run a function in a fresh instance of the same module, wait, and get its value or its
+crash.
 
 ```nanyx fragment
 isolate: [Isolate] (() -> a) -> #some(a) | #crashed(Crash)
@@ -233,71 +393,40 @@ match isolate { parse(input) \evaluate }
   | #crashed(c) -> println("That crashed: {c.message}")
 ```
 
-The function runs in a fresh instance of the same module. What it captures is deep-copied in, and its result is
-deep-copied out. Nothing is caught inside the failing code: the boundary turns "that instance died" into a tag,
-which is how every other failure looks. `Isolate` is a context the host provides, like `Console`.
+Nothing is caught inside the failing code: the boundary turns "that instance died" into a tag, which is how every other
+failure looks. When an instance dies, the host closes the files and connections it held.
 
-- **What can cross is already decided by contexts.** A value whose type carries a scoped context (`[Memory]`, so an
-  `MRef`, an `MList`) can't leave its scope, so it can't be captured by the function or returned. Shared mutable
-  state between processes can't be written.
-- **The copy is generated code,** as `==` and `dbg` are: the module knows its own layouts. A protected type's
-  invariants survive, since its value is copied as it is, never rebuilt. A closure can cross: the code is the same
-  module's, and its captures are copied.
-- **Who's outside a boundary** gets the resources: when an instance dies, the host closes the files and connections it
-  held.
+It is no longer the primitive the rest is built on. It's a run-and-stop process, local and awaited at once, and can be
+library code over processes. The test runner and the HTTP host don't need it: the runtime runs each test, and each
+request, in a fresh instance of its own, and needs only crash reports from it ([Testing](./testing#decided)). What it
+offers code in the same module is a boundary for what the type checker can't rule out: a crash, and with the host's
+limits, a loop that never ends or memory that runs out. A **playground or REPL** is the use: a snippet that crashes or
+never ends doesn't lose the session.
 
-The test runner and the HTTP host don't need it: the runtime runs each test, and each request, in a fresh instance of
-its own, and needs only crash reports from it ([Testing](./testing#decided)). Uses before there are any processes:
-
-- A **playground or REPL**: a crashing snippet doesn't lose the session.
-- **Plugins**: running code the program doesn't trust, with only the contexts it's given.
-
-## Processes, mailboxes and supervision
-
-A process is a long-lived `isolate` with a mailbox, in a package (`nanyx.process`, a working name). Messages are
-**typed**, as Gleam's OTP does it, not Erlang's untyped mailboxes, so a tag union is the protocol:
-
-```nanyx fragment
-type CounterMessage = #increment | #get(reply: Subject(int))
-
-def counter: [Process(CounterMessage)] int -> () = { count ->
-  match receive()
-    | #increment -> counter(count + 1)
-    | #get(reply) ->
-        reply \send(count)
-        counter(count)
-}
-
-def main = {
-  def c = process.start { counter(0) }
-  c \send(#increment)
-  println("{c \call { reply -> #get(reply) }}")      -- send and wait for the answer
-}
-```
-
-A process's loop is a tail-recursive function, as in Erlang; its state is its argument.
-
-Supervision is ordinary library code: a supervisor is a process that starts children, gets `#crashed(Crash)` when one
-ends, and restarts it by a policy (one for one, one for all), as OTP does:
-
-```nanyx fragment
-def main = supervise(strategy = #oneForOne, [
-  child("cache") { cache.run(capacity = 1000) },
-  child("worker") { worker.run() },
-])
-```
-
-Processes can be scoped too: `supervise` returns only when its children have stopped, so a crash's reach is visible
-in the code.
+**Plugins aren't a use.** `isolate` runs the program's own code, which was type-checked with it, and a function's
+contexts already say what it may do: `() -> a` can't print, whatever instance it runs in. Code the program doesn't trust
+is another module, loaded while it runs, with its imports linked to the capabilities it is given. That is what the
+component model does ([Components](./components)), and it is a different primitive from `isolate`: a closure can't
+cross to another module, whose code doesn't have its function.
 
 # Open questions
 
-- **Fresh or reused instances.** `isolate` in a fresh instance gives clean memory; reusing a warm one is faster but
-  needs a reset, and anything left behind leaks between calls.
+- **Local and remote: the same, or visibly different?** Erlang makes a remote process look like a local one; Orleans,
+  and the Waldo paper, make a remote call visibly one that can fail. With failures in every call's type, as proposed,
+  the question is whether one context covers both, or a remote one is a context of its own.
+- **Can closures be sent?** Sending only data is simpler and works between machines, but loses a supervisor's "restart
+  by calling this function", for which a child would name a registered function, as an OTP child spec names a module, a
+  function and its arguments. Or closures are sendable only within one build, which the type would have to say.
+- **Is an actor reference a context?** An interface is a record of functions someone else provides, which is close to
+  what a context is: a function that requires `[Counter]` could be given a local, a remote or a fake one, as the test
+  host loads fakes. It doesn't fit a program that holds many counters, rather than one in scope.
+- **Is `Isolate` a context?** It reaches nothing outside the program, but costs an instance, and not every host can
+  give it, as not every host can suspend for `Async`. The alternative is a built-in every host supports, with only its
+  limits the host's choice.
+- **Fresh or reused instances.** A fresh instance gives clean memory; reusing a warm one is faster but needs a reset,
+  and anything left behind leaks between calls.
 - **Is the top level supervised?** Erlang-style, `main` could run under a supervisor by default, so a crash in any
   process is contained unless the program says otherwise. Or isolation stays opt-in.
-- **Typed channels first, or `isolate` alone?** `isolate` covers tests, the HTTP host and plugins; processes can wait
-  for a real use.
 - **Wasm exceptions for user crashes.** WebAssembly 3.0 has `throw` and `try_table`. A `crash` that throws could make
   a boundary cheaper and let the compiler drop reference counts as it unwinds. Real traps (stack overflow, out of
   memory) still need the instance boundary, so this would be an optimisation, not a replacement.
@@ -310,12 +439,14 @@ in the code.
 
 # Plan
 
-The rest of async is filed in stages. The crash-boundary steps are proposals, not filed.
+The rest of async is filed in stages. The process steps are proposals, not filed.
 
 | Step | Issue | Stage |
 |---|---|---|
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Tasks on stack switching, once it's standard and widely supported | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
 | Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) | Ready (testing's stage 1) |
-| `isolate` and the deep copy, once a use needs it that a host's instance per call can't cover | | proposed |
-| `nanyx.process`: typed mailboxes and supervisors, and hot streams on them | | proposed |
+| Sendable types, process outcomes and addressing, designed for processes on other machines | | proposed |
+| Processes in the host, and run-and-stop processes as tasks in other instances | | proposed |
+| Stages on channels, servers and actors on interfaces, and supervisors | | proposed |
+| `isolate`, as library code over processes, once a playground or REPL needs it | | proposed |

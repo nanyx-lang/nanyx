@@ -22,7 +22,7 @@ Settled with the maintainer on 26 November 2026 ([#2936](https://github.com/nany
 
 - **Crash boundaries aren't a prerequisite.** The runtime runs each test in a fresh instance, as it answers each
   request in one for the HTTP host ([Test builds](../deep-dives/test-builds#the-runner)). The language-level `isolate` on
-  [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#isolate-a-crash-boundary-as-a-value) waits for
+  [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#isolate) waits for
   a use the runner can't cover.
 - **The test host is a shipped package,** `nanyx.test.host`, beside the console and HTTP hosts. Its root imports the
   runtime's `nanyx:test`, as the HTTP host's imports `nanyx:serve`, to learn which test to run.
