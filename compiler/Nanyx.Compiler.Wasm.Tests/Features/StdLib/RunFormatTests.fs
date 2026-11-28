@@ -1,5 +1,5 @@
 /// `Format` and `format` (#3173): a value written by a format spec, after Python's format-spec mini-language, for the
-/// numbers, strings, chars, bools and instants, and a spec a type doesn't take.
+/// numbers, strings, chars, bools, instants and unit quantities, and a spec a type doesn't take.
 module TranspilerWasmTests.Features.StdLib.Format
 
 open Xunit
@@ -229,3 +229,67 @@ println(float.format(0.0 / 0.0, decimals = 2))
 println(float.format(-1.0 / 0.0, decimals = 2))
 """
     |> assertRan "3\n-1.88\n0.00\n1.00\n3\nNaN\n-Infinity\n"
+
+[<Fact>]
+let ``Run - a unit quantity is written in the unit its spec names after a space, or else in the one toString picks`` () =
+    runSource
+        """dimension Length(float)
+@baseUnit unit m: Length
+unit km: Length = 1000m
+unit cm: Length = 0.01m
+
+println(format(1500ms, ".1f ms"))
+println(format(1500ms, ".2f"))
+println(format(1500ms, ""))
+println(format(1500ms, "8.3f s") ++ "|")
+println(format(-3ms, "+.2f"))
+println(format(0ms, ".1f"))
+println(format(1000000000ns, ",.0f ns"))
+println(format(2.5km, ".1f m"))
+println(format(2.5km, ""))
+println(format(0.25m, ".0f cm"))
+"""
+    |> assertRan "1500.0ms\n1.50s\n1.5s\n   1.500s|\n-3.00ms\n0.0s\n1,000,000,000ns\n2500.0m\n2.5km\n25cm\n"
+
+[<Fact>]
+let ``Run - a derived dimension is written in its own units or its parts' display units, and a sized storage as a float`` () =
+    runSource
+        """dimension Length(float)
+@baseUnit unit m: Length
+unit km: Length = 1000m
+dimension Speed = Length / Time
+unit kmh: Speed = 1km / 1hr
+dimension Count(I16)
+unit things: Count
+
+println(format(36.0km / 1hr, ".1f"))
+println(format(36.0km / 1hr, ".1f kmh"))
+println(format(I16.fromInt(12) * 1things, "03.0f things"))
+"""
+    |> assertRan "10.0m/s\n36.0kmh\n012things\n"
+
+[<Fact>]
+let ``Run - a unit its dimension doesn't have, and a spec a float doesn't take, are #badFormat for a unit quantity`` () =
+    runSource
+        """dimension Length(float)
+@baseUnit unit m: Length
+unit km: Length = 1000m
+
+def show: [Format(a), Console] a, string -> () = { value, spec ->
+  match tryFormat(value, spec)
+    | #some(text) -> println(text)
+    | #badFormat(bad) -> println("{bad.of} '{bad.spec}' at {bad.at}: {bad.expected}")
+}
+
+show(1500ms, ".1f parsec")
+show(2.5km, ".1f s")
+show(1500ms, ".1d ms")
+show(1500ms, "x")
+"""
+    |> assertRan (
+        String.concat
+            ""
+            [ "Time '.1f parsec' at 4: the name of a unit of Time: `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`\n"
+              "Length '.1f s' at 4: the name of a unit of Length: `km` or `m`\n"
+              "Time '.1d ms' at 2: one of `e`, `E`, `f`, `F`, `g`, `G` or `%`\n"
+              "Time 'x' at 0: one of `e`, `E`, `f`, `F`, `g`, `G` or `%`\n" ])

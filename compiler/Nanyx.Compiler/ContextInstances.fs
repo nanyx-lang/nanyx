@@ -268,8 +268,8 @@ let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys
 let private derivableType (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) : Ty option =
     match argTys with
     | [ ty ] when StructuralInstances.derives ctxName
-                  && (tryResolveAttachedFunction env ty InterpolationHoles.memberName).IsNone
-                  && not (InterpolationHoles.hasBuiltInInstance ty) -> Some ty
+                  && (tryResolveAttachedFunction env ty (StructuralInstances.memberOf ctxName)).IsNone
+                  && not (ctxName = InterpolationHoles.context && InterpolationHoles.hasBuiltInInstance ty) -> Some ty
     | _ -> None
 
 /// The instance of `ctxName` in scope in `env` at the part `ty` of a structure, for one that is not a type variable
@@ -719,7 +719,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // A structure with more to settle finds its instance once its type is known, as a hole does: when
                     // the def around it is inferred, if that def does not write its type, and otherwise once the module
                     // is inferred.
-                    | None, None when not settled && (derivableType env ctxName argTys |> Option.bind (StructuralInstances.variables Set.empty)).IsSome ->
+                    | None, None when not settled && (derivableType env ctxName argTys |> Option.bind (StructuralInstances.variables Set.empty ctxName)).IsSome ->
                         match current.ContextScope with
                         | _ when InterpolationHoles.isHole name ->
                             InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
@@ -994,7 +994,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
     // parts, makes the def require the context of each.
     let derivedVars (pending: PendingContextInstance) (argTys: Ty list) =
         derivableType env pending.Context argTys
-        |> Option.bind (StructuralInstances.variables scheme.Quantified)
+        |> Option.bind (StructuralInstances.variables scheme.Quantified pending.Context)
         |> Option.defaultValue []
     ContextInference.resolvePending state name symbol scheme derivedVars (fun ownInstance pending argTys current ->
         let scopeEnv, annotatedDef = current.HoleScopes |> Map.tryFind pending.Call |> Option.defaultValue (env, None)

@@ -37,7 +37,20 @@ match 3.0 \tryFormat(".2q")
 ```
 
 The prelude has an instance for `int`, `float`, the [sized numbers](prelude-sized-numbers), `string`, `char`, `bool`
-and [`Instant`](prelude-instant). A type of your own gets one by attaching a `tryFormat`, as it gets a `ToString` by
+and [`Instant`](prelude-instant), and the compiler makes one for each [unit quantity](../advanced/units-of-measure),
+which names the unit to write it in after a space:
+
+```nanyx
+println(format(1500ms, ".1f ms"))
+println(format(1500ms, ".2f s"))
+println(format(1500ms, ".2f"))
+
+-- 1500.0ms
+-- 1.50s
+-- 1.50s
+```
+
+A type of your own gets one by attaching a `tryFormat`, as it gets a `ToString` by
 attaching a `toString`.
 
 # Reference
@@ -67,7 +80,7 @@ gives `#badFormat` for a spec the type doesn't take; [`format`](#format-1) write
 program with the reason.
 
 The prelude has an instance for `int`, `float`, the sized numbers, `string`, `char`, `bool` and
-`Instant`. The numbers, strings, chars and bools take Python's format-spec mini-language: `[[fill]
+`Instant`, and the compiler makes one for each unit quantity. The numbers, strings, chars and bools take Python's format-spec mini-language: `[[fill]
 align][sign][z][#][0][width][grouping][.precision][type]`, where
 
 - `align` is `<` (left), `>` (right), `^` (centred) or `=` (padded after the sign), with the
@@ -94,6 +107,12 @@ rounded with halves away from zero. Not a number is `nan`, and the infinities `i
 (`NAN` and `INF` for `E`, `F` and `G`). The empty spec writes a value as interpolation does.
 
 An `Instant` takes `strftime`'s directives, in UTC, with English names (see [`Instant.tryFormat`](#instanttryformat)).
+
+A unit quantity, a value of a dimension stored as an `int`, a float or a sized integer narrower
+than 64 bits, takes a float's spec, then the name of one of its dimension's units after a space:
+its number is written in that unit by the spec, then the unit, so `format(1500ms, ".1f s")` is
+`"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
+`format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
 
 ## `format`
 
