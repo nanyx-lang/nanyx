@@ -2977,7 +2977,7 @@ To fix it, define the dimension's units closer in size, or, for a dimension stor
 # NYX0307: Format spec its value's type doesn't take
 
 A spec written in a string's hole, after a `:`, is one the type of the value it writes doesn't take: a precision for an
-integer, a sign for text, a type letter the value has no form for, a unit a unit quantity's dimension doesn't have in
+integer, a sign for text, a type letter the value has no form for, a unit, or a composite of units, that a unit quantity's dimension doesn't have in
 the module. The compiler reads the spec as the value's
 [`tryFormat`](../stdlib/prelude-format) would, and reports where in it the spec goes wrong and what could come there.
 

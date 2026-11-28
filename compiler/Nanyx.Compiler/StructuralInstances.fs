@@ -405,8 +405,8 @@ module internal StructuralInstances =
     /// `spec`: its number, as a `float`, written by a float's spec, in the unit of `units` named after a space at the
     /// spec's end, `".1f ms"`, or else in the unit its `toString` writes a float in, then that unit's name, `500.0ms`
     /// (see `__measuredTryFormat` in the prelude). A spec may name the units of the dimension itself, a derived
-    /// dimension's own too, and with none named a derived dimension's value is written in its parts' default display
-    /// units.
+    /// dimension's own too, or a composite of its base parts' units, `km/hr`, whose powers make the dimension; with none
+    /// named a derived dimension's value is written in its parts' default display units.
     let private measuredFormat (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) (spec: Expression) : Expression =
         let expr = Expression.at span
         let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
@@ -427,6 +427,15 @@ module internal StructuralInstances =
                 | None -> expr (ListExpr []), expr (ListExpr []), ""
             else names own, scales own, own |> List.tryFind _.IsDisplay |> Option.map _.Name |> Option.defaultValue ""
         let before, after = measuredFrame dimension units
+        // Each unit of each base part, by the part's position in the dimension, in the order `Dimension.text` writes the
+        // parts in, for a composite unit.
+        let parts = Dimension.multiply dimension []
+        let partUnits =
+            parts
+            |> List.indexed
+            |> List.collect (fun (part, (id, _)) ->
+                units |> List.filter (fun info -> info.Dimension = Dimension.ofBase id) |> List.distinctBy _.Name |> List.map (fun info -> part, info))
+        let integer (n: int) = expr (LiteralExpr (IntLit (bigint n)))
         call measuredTryFormat [
             x
             spec
@@ -437,7 +446,12 @@ module internal StructuralInstances =
             text display
             text before
             text after
-            text (Dimension.text dimension) ]
+            text (Dimension.text dimension)
+            expr (ListExpr (partUnits |> List.map (snd >> _.Name >> text)))
+            expr (ListExpr (partUnits |> List.map (fst >> integer)))
+            expr (ListExpr (partUnits |> List.map (snd >> _.Scale >> number)))
+            expr (ListExpr (parts |> List.map (snd >> integer)))
+            expr (ListExpr (parts |> List.map (fst >> _.Name >> text))) ]
 
     let private specName = "__spec"
 
@@ -714,8 +728,9 @@ module internal StructuralInstances =
                 // storage units.
                 | MeasureShape(dimension, storage, _) ->
                     let parts = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id))
-                    let own = if ctxName = formatting then Units.seenOf state dimension else []
-                    MeasureShape(dimension, storage, own @ (parts |> List.filter (fun info -> UnitInfo.isStorage info || info.IsDisplay)))
+                    // `Format` takes each unit of a part, for a spec's composite unit, `km/hr` (see `measuredFormat`).
+                    if ctxName = formatting then MeasureShape(dimension, storage, Units.seenOf state dimension @ parts)
+                    else MeasureShape(dimension, storage, parts |> List.filter (fun info -> UnitInfo.isStorage info || info.IsDisplay))
                 | _ -> shape
             let names = ContextInference.varNames ty
             let state = namingUnseen names ty state

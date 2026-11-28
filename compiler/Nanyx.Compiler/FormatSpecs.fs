@@ -17,8 +17,9 @@ module internal FormatSpecs =
         | Text
         | Instant
         /// A unit quantity of the dimension written `dimension`, whose units the module sees are `units`, the largest
-        /// first.
-        | Measured of dimension: string * units: string list
+        /// first, and the units of its base parts, each with the part's position, those parts' powers in it, and their
+        /// names, for a composite unit such as `km/hr`.
+        | Measured of dimension: string * units: string list * partUnits: (string * int) list * powers: int list * parts: string list
 
     /// Where a spec stops being one, a byte of it counting from 0, and what it could have there, as `BadFormat` says.
     type Bad = { At: int; Expected: string }
@@ -153,26 +154,59 @@ module internal FormatSpecs =
         | [ name; last ] -> $"`{name}` or `{last}`"
         | name :: rest -> $"`{name}`, {unitList rest}"
 
-    /// What a unit quantity says of `spec`, as `__measuredTryFormat` does: a float's spec, then one of `units` after a
-    /// space, or a float's spec alone. A spec a float rejects that has text after its last space names no unit.
-    let private measured (dimension: string) (units: string list) (spec: byte array) : Bad option =
+    /// `parts`, each to its power of `powers`, written as `Dimension.text` writes a dimension, as `fmtDimensionText` does.
+    let private dimensionText (powers: int list) (parts: string list) =
+        let repeated sign =
+            List.zip powers parts |> List.collect (fun (power, part) -> if sign * power > 0 then List.replicate (abs power) part else [])
+        let above, below = repeated 1, repeated -1
+        let dividend = if above.IsEmpty then "1" else String.concat " * " above
+        match below with
+        | [] -> if above.IsEmpty then "a number" else dividend
+        | [ single ] -> $"{dividend} / {single}"
+        | _ -> $"""{dividend} / ({String.concat " * " below})"""
+
+    /// The composite unit `text`, names joined by `*` and `/` read from the left, as `fmtComposite` reads it: the powers
+    /// of the base parts it makes, by the parts' units `partUnits`, or the byte it stops being one at.
+    let private composite (text: byte array) (partUnits: (string * int) list) (count: int) : Result<int list, int> =
+        let rec from (at: int) (sign: int) (powers: int list) =
+            let finish = Array.tryFindIndex (fun b -> b = byte '*' || b = byte '/') text[at..] |> Option.map ((+) at) |> Option.defaultValue text.Length
+            if finish = at then Error at
+            else
+                let name = System.Text.Encoding.UTF8.GetString(text[at .. finish - 1])
+                match partUnits |> List.tryFind (fst >> (=) name) with
+                | None -> Error at
+                | Some (_, part) ->
+                    let powers = powers |> List.mapi (fun index power -> if index = part then power + sign else power)
+                    if finish = text.Length then Ok powers else from (finish + 1) (if text[finish] = byte '*' then 1 else -1) powers
+        from 0 1 (List.replicate count 0)
+
+    /// What a unit quantity says of `spec`, as `__measuredTryFormat` does: a float's spec, then after a space one of
+    /// `units`, or a composite of the units of its base parts whose powers make the dimension, or a float's spec alone. A
+    /// spec a float rejects that has text after its last space names no unit, or one of the wrong dimension.
+    let private measured (dimension: string) (units: string list) (partUnits: (string * int) list) (powers: int list) (parts: string list) (spec: byte array) : Bad option =
+        let afterSpace = match Array.tryFindIndexBack ((=) (byte ' ')) spec with Some space -> space + 1 | None -> -1
+        let text = if afterSpace > 0 then spec[afterSpace..] else [||]
+        let made = if text.Length = 0 then Error 0 else composite text partUnits powers.Length
         let named =
             units
             |> List.tryPick (fun name ->
                 let written = System.Text.Encoding.UTF8.GetBytes(name: string)
                 let at = spec.Length - written.Length
                 if at >= 1 && spec[at - 1] = byte ' ' && spec[at..] = written then Some at else None)
+            |> Option.orElse (match made with Ok made when made = powers -> Some afterSpace | _ -> None)
         let numberEnd = named |> Option.map (fun at -> at - 1) |> Option.defaultValue spec.Length
-        let numberSpec = spec[.. numberEnd - 1]
         let floatBad =
-            match read numberSpec with
+            match read spec[.. numberEnd - 1] with
             | Error bad -> Some bad
             | Ok parsed -> float parsed
         match floatBad, named with
-        | Some bad, None ->
-            match Array.tryFindIndexBack ((=) (byte ' ')) numberSpec with
-            | Some space when space + 1 < numberEnd -> Some { At = space + 1; Expected = $"the name of a unit of {dimension}: {unitList units}" }
-            | _ -> Some bad
+        | Some bad, None when afterSpace > 0 && afterSpace < numberEnd ->
+            match made with
+            | Ok made ->
+                Some { At = afterSpace; Expected = $"units that make {dimension}: `{System.Text.Encoding.UTF8.GetString text}` makes {dimensionText made parts}" }
+            | Error at ->
+                let nameable = units @ (partUnits |> List.map fst |> List.filter (fun name -> not (List.contains name units)))
+                Some { At = afterSpace + at; Expected = $"the name of a unit of {dimension}: {unitList nameable}" }
         | bad, _ -> bad
 
     /// Why a value that is `formatted` doesn't take `spec`, as its `tryFormat` would give `#badFormat`, or `None` when it
@@ -190,7 +224,7 @@ module internal FormatSpecs =
             | Formatted.Float -> readBy float
             | Formatted.Text -> readBy text
             | Formatted.Instant -> instant bytes
-            | Formatted.Measured(dimension, units) -> measured dimension units bytes
+            | Formatted.Measured(dimension, units, partUnits, powers, parts) -> measured dimension units partUnits powers parts bytes
 
     /// The character of `spec` that its byte `at` is in, counting from 0, for a span on it.
     let charAt (spec: string) (at: int) : int =

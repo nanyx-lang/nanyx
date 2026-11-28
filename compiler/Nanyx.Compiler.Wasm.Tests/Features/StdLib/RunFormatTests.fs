@@ -323,3 +323,40 @@ println("{price:.2f}|{price:>9.3f}|{n:,}|{n:=+12_}|{255:#x}|{"ab":*^6}|{true:>5}
 println("{Instant.epoch:%Y-%m-%d}|{n:}|{[1, 2] \list.length:03}|{price * 2.0:e}")
 """
     |> assertRan "3.14|    3.142|-1,234,567|-  1_234_567|0xff|**ab**| true|3.14159\n1970-01-01|-1234567|002|6.283180e+00\n"
+
+[<Fact>]
+let ``Run - a unit quantity is written in a composite of its base parts' units, whose powers make its dimension`` () =
+    runSource
+        """dimension Length(float)
+@baseUnit unit m: Length
+unit km: Length = 1000m
+unit mm: Length = 0.001m
+dimension Speed = Length / Time
+unit kmh: Speed = 1km / 1hr
+
+def show: [Format(a), Console] a, string -> () = { value, spec ->
+  match tryFormat(value, spec)
+    | #some(text) -> println(text)
+    | #badFormat(bad) -> println("'{bad.spec}' at {bad.at}: {bad.expected}")
+}
+
+show(36.0km / 1hr, ".1f km/hr")
+show(36.0km / 1hr, ".1f m/s")
+show(36.0km / 1hr, ".1f kmh")
+show(2.0m * 3.0m, ".0f mm*mm")
+show(9.8m / (1.0s * 1.0s), ".2f m/s/s")
+show(36.0km / 1hr, ".1f km*hr")
+show(36.0km / 1hr, ".1f km/parsec")
+println("{36.0km / 1hr:.1f km/hr}")
+"""
+    |> assertRan (
+        String.concat
+            ""
+            [ "36.0km/hr\n"
+              "10.0m/s\n"
+              "36.0kmh\n"
+              "6000000mm*mm\n"
+              "9.80m/s/s\n"
+              "'.1f km*hr' at 4: units that make Length / Time: `km*hr` makes Length * Time\n"
+              "'.1f km/parsec' at 7: the name of a unit of Length / Time: `kmh`, `km`, `m`, `mm`, `d`, `hr`, `min`, `s`, `ms`, `us` or `ns`\n"
+              "36.0km/hr\n" ])

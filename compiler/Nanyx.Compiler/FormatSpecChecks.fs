@@ -11,12 +11,18 @@ module internal FormatSpecChecks =
     /// the one the compiler derives for a unit quantity (see `StructuralInstances`), whose units the module sees
     /// `unitsOf` gives.
     let private formatted (unitsOf: Dimension -> string list) (ty: Ty) : FormatSpecs.Formatted option =
+        let measured (dimension: Dimension) =
+            // In the order `Dimension.text` writes the parts in, as the derived `tryFormat` has them.
+            let dimension = Dimension.multiply dimension []
+            let partUnits =
+                dimension |> List.indexed |> List.collect (fun (part, (id, _)) -> unitsOf (Dimension.ofBase id) |> List.distinct |> List.map (fun name -> name, part))
+            FormatSpecs.Formatted.Measured(Dimension.text dimension, unitsOf dimension, partUnits, dimension |> List.map snd, dimension |> List.map (fst >> _.Name))
         match Unifier.unalias ty with
         | TyMeasure(dimension, storage) ->
             match Unifier.unalias storage with
-            | TyPrimitive("int" | "float" | "F32") -> Some (FormatSpecs.Formatted.Measured(Dimension.text dimension, unitsOf dimension))
+            | TyPrimitive("int" | "float" | "F32") -> Some (measured dimension)
             | SizedIntegerType integer when SizedInteger.bits integer < 64 ->
-                Some (FormatSpecs.Formatted.Measured(Dimension.text dimension, unitsOf dimension))
+                Some (measured dimension)
             | _ -> None
         | TyPrimitive "int"
         | SizedIntegerType _ -> Some FormatSpecs.Formatted.Integer

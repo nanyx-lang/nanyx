@@ -124,7 +124,10 @@ A unit quantity, a value of a dimension stored as an `int`, a float or a sized i
 than 64 bits, takes a float's spec, then the name of one of its dimension's units after a space:
 its number is written in that unit by the spec, then the unit, so `format(1500ms, ".1f s")` is
 `"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
-`format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
+`format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's. The unit may be
+a composite of the units of the dimension's base parts, joined by `*` and `/` and read from the
+left, whose powers make its dimension: `format(36.0km / 1hr, ".1f m/s")` is `"10.0m/s"`, and
+`format(2.0m * 3.0m, ".0f mm*mm")` is `"6000000mm*mm"`.
 
 A hole in a string writes its value by a spec written after a `:`, `"{price:.2f}"`, and the
 compiler checks the spec against the value's type, for a type the prelude formats and a unit

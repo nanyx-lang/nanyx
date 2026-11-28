@@ -340,8 +340,10 @@ println(format(2hr, ",.0f s"))
 -- 7,200s
 ```
 
-The spec may name any unit of the dimension the module can write, a derived dimension's own units among them, `kmh`. A
-hole takes the same spec after a `:`, `"{elapsed:.1f ms}"`, and a unit the module can't write there is an error as the
+The spec may name any unit of the dimension the module can write, a derived dimension's own units among them, `kmh`,
+or a composite of its base parts' units, joined by `*` and `/` and read from the left, whose powers make the dimension:
+`{speed:.1f km/hr}`, `{area:.0f mm*mm}`. One whose units make another dimension, `km*hr` for a speed, says what they make.
+A hole takes the same spec after a `:`, `"{elapsed:.1f ms}"`, and a unit the module can't write there is an error as the
 program compiles ([NYX0307](../standard-tools/errors#nyx0307)).
 Formatting needs the number as a float, so only a dimension stored as an `int`, a float or a sized integer narrower
 than 64 bits has it.
