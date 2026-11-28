@@ -140,8 +140,22 @@ def picked = if numbers == [] then none else [3] -- list(int)
 ```
 
 A type that takes values in is not joined so. A function that takes an `undefined` is not given where one that takes an
-`int` is expected, and a nominal type's arguments, such as an `MArray`'s, are its own, so an `MArray(undefined)` is not
-an `MArray(int)`: values of any type could be written into it.
+`int` is expected. A nominal type's argument is read as its definition uses its parameter: one the type only gives out,
+in a field, an element or a function's result, is joined as a list's elements are; one it only takes in, as a function's
+input, the other way; and one it does both with, or holds to change, as an `MArray` holds its elements, must be the
+same. So a `Stack(undefined)`, an empty stack, is given where a `Stack(int)` is expected, but an `MArray(undefined)` is
+not an `MArray(int)`: values of any type could be written into it. A private type's parameters are read the same way,
+from its definition, though code outside its module can't see inside it:
+
+```nanyx
+type Stack(a) = private list(a)
+type Sink(a) = protected (put: a -> ())
+
+def empty: Stack(undefined) = Stack([])
+def stack: Stack(int) = empty -- an empty stack is a stack of anything
+def ints: Sink(int) = Sink(put = { (n: int) -> () })
+def anything: Sink(undefined) = ints -- what takes ints takes what never comes
+```
 
 Using a value of type `undefined`, as in `crash("no").name`, or `x + 1` after `def x = crash("no")`, is not an error either: the value is worked out first and stops the program, so what uses it is never reached. `???`, the placeholder for [code not written yet](../getting-started/basics#unimplemented-code), has this type too.
 

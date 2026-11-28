@@ -69,7 +69,7 @@ module RecursiveNominals =
     /// A nominal type: its identity, its arguments, what it is made from (see `underlying`), and whether that is private.
     let (|Nominal|_|) (ty: Ty) =
         match ty with
-        | TyNominal(id, args, _, isPrivate) -> Some (id, args, underlying ty, isPrivate)
+        | TyNominal(id, args, _, facts) -> Some (id, args, underlying ty, facts.IsPrivate)
         | _ -> None
 
     /// What a reference to the nominal type being defined is made from while its definition is read: a marker, closed

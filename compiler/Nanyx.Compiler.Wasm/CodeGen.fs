@@ -740,7 +740,7 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
               NamedTypes =
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
-                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, info.IsPrivate))
+                |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Parameters |> List.map TyVar, info.Underlying, TypeDefInfo.facts info))
               Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot
               Probes = options.Probes
               TypeIds = CoreIrTypeIds.TypeIds()

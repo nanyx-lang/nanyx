@@ -80,7 +80,7 @@ let updatedOutside (state: InferState) (names: (string * TypeScheme) list) (nomi
 /// private type has no shape, so its fields are not read, matched or spread there (see "Private (opaque) types").
 let hiddenRepresentation (state: InferState) (span: SourceSpan) (ty: Ty) : NominalId option =
     match Unifier.unalias ty with
-    | TyNominal(nominal, _, _, true) when not (Visibility.inNominalHome state nominal span) -> Some nominal
+    | TyNominal(nominal, _, _, { IsPrivate = true }) when not (Visibility.inNominalHome state nominal span) -> Some nominal
     | _ -> None
 
 /// The error (NYX0212) for taking a value of the private type `nominal` apart at `span`, outside its home module: by a

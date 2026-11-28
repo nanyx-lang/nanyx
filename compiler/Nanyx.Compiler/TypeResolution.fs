@@ -183,7 +183,7 @@ let internal nominalType (info: TypeDefInfo) (argTys: Ty list) : Ty =
     let underlying =
         RecursiveNominals.instantiate info.Underlying argTys
         |> Option.defaultWith (fun () -> Unifier.applyToParameters parameters arguments info.Underlying)
-    TyNominal(TypeDefInfo.nominalId info, argTys, underlying, info.IsPrivate)
+    TyNominal(TypeDefInfo.nominalId info, argTys, underlying, TypeDefInfo.facts info)
 
 /// The contexts a type generic in contexts is written with, as its last argument (see `FunctionContexts.carried`):
 /// none for a type written without them, the pure one.
@@ -224,7 +224,7 @@ let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty 
         RecursiveNominals.instantiate info.Underlying args
         |> Option.defaultWith (fun () ->
             Unifier.applyToParameters (info.Parameters @ Option.toList info.Scope @ Option.toList info.ContextVariable) (argTys @ scopeArgument @ contextArgument) info.Underlying)
-    let nominal = TyNominal(TypeDefInfo.nominalId info, args, underlying, info.IsPrivate)
+    let nominal = TyNominal(TypeDefInfo.nominalId info, args, underlying, TypeDefInfo.facts info)
     nominal, RecursiveNominals.underlying nominal, scoped, next
 
 /// The alias `name`, defined by `info`, applied to a new variable for each of its parameters: the type of a value its
@@ -676,6 +676,7 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               Underlying = RecursiveAliases.selfMarker paramVars
               IsNominal = false
               IsPrivate = false
+              Variances = paramVars |> List.map (fun _ -> Invariant)
               IsContext = false
               IsScoped = false
               ScopedBy = None
@@ -882,6 +883,7 @@ let private setUpTypeDef (state: InferState) (name: Identifier) (modifiers: Type
           Underlying = RecursiveNominals.selfMarker
           IsNominal = isNominal
           IsPrivate = isPrivate
+          Variances = paramVars |> List.map (fun _ -> Invariant)
           IsContext = false
           IsScoped = List.exists TypeDefModifier.isScoped modifiers
           ScopedBy = scopedBy
@@ -944,6 +946,7 @@ let private finishTypeDef (originalTypeVars: Map<TypeVarKey, TyVar>) (setup: Typ
           Underlying = underlyingTy
           IsNominal = isNominal
           IsPrivate = isPrivate
+          Variances = paramVars |> List.map (fun _ -> Invariant)
           IsContext = isContextDef modifiers
           IsScoped = List.exists TypeDefModifier.isScoped modifiers
           ScopedBy = scopedBy
@@ -965,11 +968,41 @@ let private finishTypeDef (originalTypeVars: Map<TypeVarKey, TyVar>) (setup: Typ
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }
 
-let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
+/// `state` with the variances of the nominal types `names` define worked out from their definitions, which have just
+/// been read (see `Variances`), and kept on their definitions, in what a member of their group unfolds to as well. A type
+/// they are made from has its variances already, as types are registered in the order they name each other.
+let private settleVariances (names: Identifier list) (state: InferState) : InferState =
+    let defined =
+        names
+        |> List.choose (fun name -> state.TypeDefs |> Map.tryFind name)
+        |> List.filter (fun info -> info.IsNominal && not info.IsContext && info.Home = state.Home)
+    if defined.IsEmpty then state
+    else
+        let known =
+            state.TypeDefs
+            |> Map.values
+            |> Seq.filter _.IsNominal
+            |> Seq.map (fun info -> TypeDefInfo.nominalId info, info.Variances)
+            |> Map.ofSeq
+        let lookup (id: NominalId) (facts: NominalFacts) = known |> Map.tryFind id |> Option.defaultValue facts.Variances
+        let worked = defined |> List.map (fun info -> TypeDefInfo.nominalId info, Variances.ofDefinition lookup info) |> Map.ofList
+        let typeDefs =
+            state.TypeDefs
+            |> Map.map (fun _ info ->
+                match worked |> Map.tryFind (TypeDefInfo.nominalId info) with
+                | Some variances when info.IsNominal ->
+                    { info with Variances = variances; Underlying = Variances.withGroupVariances worked.TryFind info.Underlying }
+                | _ -> info)
+        { state with TypeDefs = typeDefs }
+
+let private registerOneTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let setup = setUpTypeDef state name modifiers parameters body
     let underlyingTy, next = readTypeDefBody setup.StateWithParams name modifiers setup.ParamVars setup.Self body
     let selfReferences = if canReferToItself setup.StateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     finishTypeDef state.TypeVars setup underlyingTy next selfReferences
+
+let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
+    registerOneTypeDef state name modifiers parameters body |> settleVariances [ name ]
 
 /// A type definition as a module writes it: its name, modifiers, parameters and body.
 type internal WrittenTypeDef = Identifier * TypeDefModifier list * (Identifier * TypeExpr option) list * TypeExpr
@@ -1015,7 +1048,7 @@ let private registerTypeGroup (state: InferState) (group: WrittenTypeDef list) =
         List.map2
             (fun setup body ->
                 { Name = setup.Name
-                  Nominal = if setup.IsNominal then Some (TypeDefInfo.nominalId setup.Self, setup.IsPrivate) else None
+                  Nominal = if setup.IsNominal then Some (TypeDefInfo.nominalId setup.Self, TypeDefInfo.facts setup.Self) else None
                   Body = RecursiveAliases.closeMember (variablesOf setup) body })
             setups bodies
     let state =
@@ -1034,8 +1067,9 @@ let private registerTypeGroup (state: InferState) (group: WrittenTypeDef list) =
 let internal registerTypeDefs (state: InferState) (groups: WrittenTypeDef list list) =
     groups
     |> List.fold (fun state group ->
+        let names = group |> List.map (fun (name, _, _, _) -> name)
         if isClosableGroup state group then
-            registerTypeGroup state group
+            registerTypeGroup state group |> settleVariances names
         else
             group |> List.fold (fun state (name, modifiers, parameters, body) -> registerTypeDef state name modifiers parameters body) state) state
 
