@@ -11,8 +11,9 @@ open Parser.Program.DataValues
 /// repository root, which every build of the compiler copies beside it, and the published `nanyx` has beside it in its
 /// archive. The console host is one (see `Hosts`), and its interface package, `nanyx.cli`, another.
 module ShippedPackages =
-    /// Where they are: beside the compiler.
-    let directory = Path.Combine(AppContext.BaseDirectory, "packages")
+    /// Where they are: beside the compiler, with its directory's long name, however the compiler was started (see
+    /// `LongPaths`), so that a path to one of them is spelt one way.
+    let directory = Path.Combine(LongPaths.ofPath AppContext.BaseDirectory, "packages")
 
     /// Where the package `name` would be if the compiler shipped it.
     let directoryOf (name: string) = Path.Combine(directory, name)

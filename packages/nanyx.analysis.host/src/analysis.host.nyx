@@ -53,6 +53,8 @@ type MaybeTy = #some(Ty) | #unknown
 
 type MaybeSymbol = #some(Symbol) | #none
 
+type MaybeName = #some(string) | #none
+
 --| The question `name` about the node or symbol `id`.
 def about: string, int -> Data = { name, id ->
   #tag(name, #int(id))
@@ -82,6 +84,9 @@ export def run: [HostRuntime] ([Analysis] Module -> list(Report)) -> () = { lint
       }
       redundantTypeName = { node -> ask(type bool, about("redundantTypeName", node)) }
       docComments = { () -> ask(type list(DocComment), #tag("docComments", #unit)) }
+      isContext = { name -> ask(type bool, #tag("isContext", #text(name))) }
+      contextOfMember = { node -> ask(type MaybeName, about("contextOfMember", node)) }
+      instanceDefinitions = { () -> ask(type list(string), #tag("instanceDefinitions", #unit)) }
     ) in lint(ask(type Module, #tag("module", #unit)))
 
   giving(toData(reports, type list(Report)), reportImport)

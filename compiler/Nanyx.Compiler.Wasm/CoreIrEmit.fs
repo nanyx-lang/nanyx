@@ -168,6 +168,11 @@ type private FunctionEmitter(context: EmitContext) =
     // The local a probe holds a local's text in while the runtime reads it (see `Probe`).
     let probeText = lazy (freshLocal "__probe_text" "i32")
 
+    // The locals a probe holds the runtime's answer in, which says how much of each local to write, and the printers'
+    // budget as it was before the probe set it (see `Probe`).
+    let probeAnswer = lazy (freshLocal "__probe_answer" "i32")
+    let probeBudgetBefore = lazy (freshLocal "__probe_budget" "i32")
+
     // The split points of the function, when it is a state machine (see `CoreIrSplitPoints`), its name and its result,
     // and the locals it keeps its state in and the temporaries it keeps in locals (see `TaskLowering`).
     let mutable plan: CoreIrSplitPoints.SplitPlan option = None
@@ -471,12 +476,29 @@ type private FunctionEmitter(context: EmitContext) =
             | Entry functionName -> $"entry {functionName}"
             | ProbeKind.Statement -> "statement"
             | Return -> "return"
+            | Crashing -> "crashing"
+        // A probe before a call that never returns reads its locals, so each is alive at it, though nothing after it
+        // reads them (see `ProbeKind.Crashing`).
+        let isAlive = match kind with Crashing -> (fun _ -> true) | _ -> isAlive
+        // The runtime answers 1 for the locals within a budget each, and 2 for them in full (see `Helpers.showBudget`).
+        let budget =
+            join "\n    " [
+                $"local.get ${probeAnswer.Value}"
+                "i32.const 1"
+                "i32.eq"
+                "if (result i32)"
+                $"i32.const {Helpers.showBudgetPerLocal}"
+                "else"
+                "i32.const -1"
+                "end"
+                $"global.set ${Helpers.showBudget}" ]
         let writes =
             locals
             |> List.filter (fun local -> isAlive local.Var && declared.Contains (localName local.Var))
             |> List.map (fun local ->
                 let text = probeText.Value
                 join "\n    " [
+                    budget
                     $"i32.const {context.StringOffset local.Name}"
                     (if context.TakesOver local.Printer 0 then this.DupVars [ local.Var ] else "")
                     $"local.get ${localName local.Var}"
@@ -492,8 +514,17 @@ type private FunctionEmitter(context: EmitContext) =
             "if"
             $"i32.const {id}"
             $"call ${probeCall}"
-            "if"
+            if writes.IsEmpty then "if"
+            else
+                $"local.tee ${probeAnswer.Value}"
+                "if"
+                // The budget is the printers' while the probe writes, and what it was again once it has.
+                $"global.get ${Helpers.showBudget}"
+                $"local.set ${probeBudgetBefore.Value}"
             yield! writes
+            if not writes.IsEmpty then
+                $"local.get ${probeBudgetBefore.Value}"
+                $"global.set ${Helpers.showBudget}"
             $"call ${probeWritten}"
             "end"
             "end" ]

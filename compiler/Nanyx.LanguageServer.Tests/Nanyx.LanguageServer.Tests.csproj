@@ -20,6 +20,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.LanguageServer\Nanyx.LanguageServer.csproj" />
+    <!-- The official linter runs as its package, nanyx.lint, which is built and run on WebAssembly. -->
+    <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
+    <ProjectReference Include="..\Nanyx.Compiler.Runtime\Nanyx.Compiler.Runtime.fsproj" />
   </ItemGroup>
 
   <Import Project="..\CheckedLibrary.targets" />

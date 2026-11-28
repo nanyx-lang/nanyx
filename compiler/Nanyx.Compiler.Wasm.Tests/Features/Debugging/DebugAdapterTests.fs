@@ -193,17 +193,21 @@ let ``Stepping in goes into the function a statement calls, over runs through it
     Assert.Equal(0, client.Exited())
 
 [<Fact>]
-let ``A frame further out has its locals from when the program last stopped in it, and none if it never did`` () =
-    use client = session program
-    client.Launch [ 8 ] |> ignore
+let ``A frame further out shows its locals as of its call, though the program never stopped in it, a large value cut short`` () =
+    use client =
+        session "def inner = { n: int ->\n  n * 2\n}\n\ndef outer = { xs: list(int) ->\n  def count = list.length(xs)\n  inner(count) + list.length(xs)\n}\n\nprintln(outer(list.init(500, { i -> i })))\n"
+    client.Launch [ 2 ] |> ignore
     client.Stopped() |> ignore
-    client.Resume "stepIn"
-    client.Stopped() |> ignore
-    // `double` is called in `sum`'s last statement, a tail call, so `sum`'s frame is gone; the top level never stopped.
-    Assert.Equal<(string * int) list>([ "double", 2; "<top level>", 12 ], client.Stack())
+    Assert.Equal<string list>([ "inner"; "outer"; "<top level>" ], client.Stack() |> List.map fst)
+    // The frame it stopped in is written whole.
+    Assert.Equal(("Locals", [ "n", "500" ]), client.Locals 1)
+    // `outer`'s are as of its last statement, the call: each written within a budget as the program went on.
     let name, locals = client.Locals 2
-    Assert.StartsWith("Locals not recorded", name)
-    Assert.Empty(locals)
+    Assert.Equal("Locals at line 7, values cut short: stop in this frame to see them whole", name)
+    Assert.Contains(("count", "500"), locals)
+    let xs = locals |> List.find (fun (local, _) -> local = "xs") |> snd
+    Assert.StartsWith("[0, 1, 2", xs)
+    Assert.EndsWith(", …]", xs)
     client.Resume "continue"
     client.Exited() |> ignore
 
@@ -251,6 +255,17 @@ let ``A crash stops the program at the frame that crashed, with its message, and
     client.Resume "continue"
     Assert.Equal(1, client.Exited())
     Assert.StartsWith("1\n", client.Output.ToString())
+
+[<Fact>]
+let ``A crash shows the crashing frame's locals as they were at the call that crashed, though it never stopped there`` () =
+    use client = session "def inner = { n: int ->\n  def limit = 2\n  if n > limit then crash(\"too big\") else n\n}\n\nprintln(inner(1))\nprintln(inner(5))\n"
+    client.Launch [] |> ignore
+    Assert.Equal(("exception", Some "too big"), client.Stopped())
+    Assert.Equal<string list>([ "crash"; "inner"; "<top level>" ], client.Stack() |> List.map fst)
+    // `inner` is the second frame, and the program ran freely to the crash: the locals are the crash probe's.
+    Assert.Equal(("Locals at line 3", [ "limit", "2"; "n", "5" ]), client.Locals 2)
+    client.Resume "continue"
+    Assert.Equal(1, client.Exited())
 
 [<Fact>]
 let ``--debug with --profile, a memory check or --dbg-to is a usage error, and the program doesn't run`` () =

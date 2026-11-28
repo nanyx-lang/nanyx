@@ -78,6 +78,11 @@ let reportedAt (source: string) : (string * string) list =
     let source = withFinalNewline source
     reportedAtIn source (Compiler.compile source)
 
+/// Makes the linter a linter package read from `store` runs, as the CLI does: its lint build, built and run on
+/// WebAssembly (see `LintBuilds`).
+let makeLinter (store: PackageStore) : LinterPackage -> Result<Linter, string> =
+    LintBuilds.make store (Transpiler.Wasm.LintBuild.runner Nanyx.Runtime.WasmLinter.load)
+
 /// The official linter as a project that turns it on runs it: its package, `nanyx.lint`, seeded, built into a lint build
 /// and run, beside the compiler's own rules for each rule the package doesn't implement yet (see `Linters.withPackage`).
 let officialLinter : Lazy<Linter> =
@@ -89,9 +94,8 @@ let officialLinter : Lazy<Linter> =
                Version = VersionRequirement.tryParse Toolchain.version
                Span = SourceSpan.none
                Settings = None }
-         let runner = Transpiler.Wasm.LintBuild.runner Nanyx.Runtime.WasmLinter.load
          match Package.scriptLinters store SourceSpan.none [ entry ] with
-         | [ linter ], [] -> Linters.withPackage (LintBuilds.make store runner linter |> Result.defaultWith failwith) Linters.official
+         | [ linter ], [] -> Linters.withPackage (makeLinter store linter |> Result.defaultWith failwith) Linters.official
          | _, errors -> failwith $"nanyx.lint can't be read: %A{errors}")
 
 /// Every linter the compiler has, each rule at its default severity, as `Linters.everyLinter` is, with the official one

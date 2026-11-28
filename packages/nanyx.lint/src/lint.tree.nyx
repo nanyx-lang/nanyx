@@ -1,0 +1,230 @@
+--| Walking a module's syntax tree, as the rules read it.
+module lint.tree
+
+import nanyx.analysis/syntax as (Expr, MatchArm, Module, NodeId, Pattern, Span, Statement, TopLevelItem, TypeExpr, TypeField)
+
+--| The value of an optional node, as a list of none or one.
+def optional: (#some(a) | #none) -> list(a) = {
+  | #some(value) -> [value]
+  | #none -> []
+}
+
+--| Whether `outer` covers all of `inner`.
+export def contains: Span, Span -> bool = { outer, inner ->
+  outer.start <= inner.start and inner.end <= outer.end
+}
+
+--| Whether two spans are the same place.
+export def sameSpan: Span, Span -> bool = { a, b ->
+  a.start == b.start and a.end == b.end
+}
+
+--| The expressions written in a pattern and the patterns inside it: each guard's predicate, each
+  range's ends and each tag's arguments.
+export def patternExprs: Pattern -> list(Expr) = { p ->
+  match p.kind
+    | #guard(predicate) -> [predicate]
+    | #range(r) -> [r.from, r.to]
+    | #tuple(t) -> list.flatMap(t.items, patternExprs)
+    | #and(patterns) -> list.flatMap(patterns, patternExprs)
+    | #constructor(c) -> list.flatMap(c.patterns, patternExprs)
+    | #members(m) -> list.flatMap(m.members, { pair -> patternExprs(pair.1) })
+    | #list(l) -> list.flatMap(list.flatten([l.items, optional(l.rest)]), patternExprs)
+    | #listMiddle(l) -> list.flatMap(list.flatten([l.before, l.after]), patternExprs)
+    | #tag(t) -> list.flatMap(optional(t.payload), patternExprs)
+    | #argumentTag(t) -> [t.arguments, ...list.flatMap(optional(t.payload), patternExprs)]
+    | _ -> []
+}
+
+--| The expressions written in the patterns of match arms.
+def armExprs: list(MatchArm) -> list(Expr) = { arms ->
+  list.flatMap(arms, { arm -> list.flatMap(arm.patterns, patternExprs) })
+}
+
+--| The expressions a statement holds.
+export def statementExprs: Statement -> list(Expr) = { statement ->
+  match statement.kind
+    | #def(d) -> [d.value]
+    | #expr(value) -> [value]
+    | #use(value) -> [value]
+    | _ -> []
+}
+
+--| The expressions directly within an expression, and the statements of it if it is a block: a
+  match's patterns' among them.
+export def childrenOf: Expr -> (list(Expr), list(Statement)) = { e ->
+  match e.kind
+    | #call(c) -> (c.arguments, [])
+    | #contextCall(c) -> (c.arguments, [])
+    | #tuple(items) -> (items, [])
+    | #list(items) -> (items, [])
+    | #lambda(l) -> ([l.body], [])
+    | #contextNames(c) -> ([c.body], [])
+    | #binary(b) -> ([b.left, b.right], [])
+    | #pipe(p) -> ([p.value, ...p.arguments], [])
+    | #block(statements) -> ([], statements)
+    | #match(m) -> (
+      list.flatten([m.values, armExprs(m.arms), list.map(m.arms, { arm -> arm.body })])
+      []
+    )
+    | #except(x) -> (
+      list.flatten([[x.value], armExprs(x.arms), list.map(x.arms, { arm -> arm.body })])
+      []
+    )
+    | #record(fields) ->
+      def value = {
+        | #named(_, v) -> v
+        | #positional(v) -> v
+      }
+
+      (list.map(fields, value), [])
+    | #tag(t) -> (optional(t.payload), [])
+    | #if(i) -> ([i.condition, i.whenTrue, i.whenFalse], [])
+    | #member(m) -> ([m.target], [])
+    | #useIn(u) -> ([u.value, u.body], [])
+    | #bind(b) -> ([b.value], [])
+    | #return(value) -> ([value], [])
+    | #interpolated(parts) ->
+      def part = {
+        | #expr(v) -> #some(v)
+        | #text(_) -> #skip
+      }
+
+      (list.filterMap(parts, part), [])
+    | _ -> ([], [])
+}
+
+--| The expressions directly within an expression, its statements' among them.
+def children: Expr -> list(Expr) = { e ->
+  def (exprs, statements) = childrenOf(e)
+  list.flatten([exprs, list.flatMap(statements, statementExprs)])
+}
+
+--| An expression and every expression within it, each before those within it.
+export def exprsWithin: Expr -> list(Expr) = { e ->
+  [e, ...list.flatMap(children(e), exprsWithin)]
+}
+
+--| The expressions a top-level item holds, and the items of a module block.
+export def itemExprs: TopLevelItem -> list(Expr) = { item ->
+  match item.kind
+    | #def(d) -> [d.value]
+    | #expr(value) -> [value]
+    | #unitDeclaration(u) -> optional(u.multiple)
+    | #moduleBlock(b) -> list.flatMap(b.items, itemExprs)
+    | _ -> []
+}
+
+--| Every expression written in the module, each before those within it.
+export def moduleExprs: Module -> list(Expr) = { m ->
+  list.flatMap(list.flatMap(m, itemExprs), exprsWithin)
+}
+
+--| The blocks of an expression and of everything within it, each as its statements.
+export def blocksWithin: Expr -> list(list(Statement)) = { e ->
+  def (exprs, statements) = childrenOf(e)
+  def own = if list.isEmpty(statements) then [] else [statements]
+
+  list.flatten(
+    [
+      own
+      list.flatMap(exprs, blocksWithin)
+      list.flatMap(list.flatMap(statements, statementExprs), blocksWithin)
+    ]
+  )
+}
+
+--| The type expressions directly inside a type expression.
+def typeChildren: TypeExpr -> list(TypeExpr) = { t ->
+  def fieldTypes = { fields ->
+    list.flatMap(
+      fields
+      {
+        | #field(f) -> optional(f.annotation)
+        | #attribute(_) -> []
+      }
+    )
+  }
+
+  match t.kind
+    | #namedArgument(n) -> [n.value]
+    | #associated(a) -> [a.context]
+    | #typeArgument(inner) -> [inner]
+    | #tuple(items) -> items
+    | #union(items) -> items
+    | #intersection(items) -> items
+    | #contexts(items) -> items
+    | #apply(a) -> a.arguments
+    | #record(fields) -> fieldTypes(fields)
+    | #openRecord(r) -> fieldTypes(r.fields)
+    | #function(f) -> [f.input, f.output]
+    | #product(left, right) -> [left, right]
+    | #quotient(left, right) -> [left, right]
+    | #tag(tag) -> optional(tag.payload)
+    | #withContexts(w) -> [...w.contexts, w.inner]
+    | #constraint(c) -> [c.inner]
+    | #where(w) -> [w.inner]
+    | _ -> []
+}
+
+--| A type expression and every type expression inside it.
+export def typesWithin: TypeExpr -> list(TypeExpr) = { t ->
+  [t, ...list.flatMap(typeChildren(t), typesWithin)]
+}
+
+--| The types a type definition writes: its parameters' constraints, then its body.
+def definitionTypes
+  : list((string, (#some(TypeExpr) | #none))), TypeExpr -> list(TypeExpr)
+  = { parameters, body ->
+    [...list.flatMap(parameters, { parameter -> optional(parameter.1) }), body]
+  }
+
+--| The types a top-level item writes: a def's annotation, a type definition's, a dimension's and
+  a unit's, and those of the items of a module block.
+export def itemTypes: TopLevelItem -> list(TypeExpr) = { item ->
+  match item.kind
+    | #def(d) -> optional(d.annotation)
+    | #typeDef(t) -> definitionTypes(t.parameters, t.body)
+    | #moduleBlock(b) -> list.flatMap(b.items, itemTypes)
+    | #dimension(d) -> list.flatten([optional(d.storage), optional(d.derived)])
+    | #unitDeclaration(u) -> [u.dimension]
+    | _ -> []
+}
+
+--| The types written directly in an expression: its lambda's parameters' annotations, its block's
+  defs' annotations and type definitions, and the context it names.
+export def exprTypes: Expr -> list(TypeExpr) = { e ->
+  match e.kind
+    | #lambda(l) -> list.flatMap(l.parameters, { parameter -> optional(parameter.1) })
+    | #contextNames(c) -> list.flatMap(c.names, { named -> optional(named.1) })
+    | #block(statements) ->
+      list.flatMap(
+        statements
+        { statement ->
+          match statement.kind
+            | #def(d) -> optional(d.annotation)
+            | #typeDef(t) -> definitionTypes(t.parameters, t.body)
+            | _ -> []
+        }
+      )
+    | #contextMember(c) -> [c.context]
+    | #contextCall(c) -> [c.context]
+    | #typeValue(t) -> [t]
+    | _ -> []
+}
+
+--| Where each expression and type written in the module is, by its node.
+export def writtenSpans: Module -> map(NodeId, Span) = { m ->
+  def exprs = moduleExprs(m)
+
+  def types = list.flatMap(
+    list.flatten([list.flatMap(m, itemTypes), list.flatMap(exprs, exprTypes)])
+    typesWithin
+  )
+
+  map.fromList(
+    list.flatten(
+      [list.map(exprs, { e -> (e.id, e.span) }), list.map(types, { t -> (t.id, t.span) })]
+    )
+  )
+}

@@ -26,6 +26,11 @@ let endsTheProgram (definitionTypes: Map<string, NyxCompiler.Ty>) (callee: strin
     | Some (NyxCompiler.TyFunc(_, result, _)) -> NyxCompiler.Unifier.unalias result = NyxCompiler.Unifier.bottomType
     | _ -> false
 
+/// `call`, a call at `place`, with a crashing probe just before it that writes `locals ()` if it `neverReturns`, as a
+/// call of `crash` doesn't: the locals in scope there, which the debugger shows at the crash (see `ProbeKind.Crashing`).
+let beforeCrash (neverReturns: bool) (locals: unit -> ProbeLocal list) (place: Place option) (call: Expr) : Expr =
+    if neverReturns then { call with Kind = Do(probe Crashing (locals ()) place, call) } else call
+
 /// `body`, the function `name`'s, with an entry probe writing `locals` at its start, at `place`, and a return probe at
 /// each place it ends, at the place of what it ends in. A function that ends in a call ends before the call, so that a
 /// tail call stays one, and the callee's entry follows, but for a call that `endsTheProgram` says never returns, such

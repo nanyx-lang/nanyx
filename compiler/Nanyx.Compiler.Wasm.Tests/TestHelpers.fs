@@ -289,14 +289,12 @@ let private command (arguments: string list) : Shell -> int =
 let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
     inProcess (Directory.GetCurrentDirectory()) standardInput [] (command arguments)
 
-/// Runs `nanyx` with `arguments` in a process of its own: the CLI built beside the tests (`nanyx.dll`), started by the
-/// `dotnet` that runs them. For a command that measures the run, such as `run --profile`, which this process's
-/// collections of garbage would disturb: they stop its managed threads, though not the WebAssembly the run is executing
-/// (#2491).
-let nanyxProcess (arguments: string list) : RunOutcome =
-    let host = Environment.GetEnvironmentVariable "DOTNET_HOST_PATH" |> Option.ofObj |> Option.defaultValue "dotnet"
-    let start = ProcessStartInfo(host, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true)
-    start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "nanyx.dll"))
+/// The outcome of `start`, a process of `nanyx`, given `arguments` and run in `workingDirectory`.
+let private runNanyx (start: ProcessStartInfo) (workingDirectory: string) (arguments: string list) : RunOutcome =
+    start.RedirectStandardOutput <- true
+    start.RedirectStandardError <- true
+    start.RedirectStandardInput <- true
+    start.WorkingDirectory <- workingDirectory
     for argument in arguments do
         start.ArgumentList.Add argument
     use run = Process.Start start
@@ -307,6 +305,27 @@ let nanyxProcess (arguments: string list) : RunOutcome =
     { ExitCode = run.ExitCode
       StandardOutput = output
       StandardError = error.Result }
+
+/// The `dotnet` that runs the tests, started on the CLI built in `cliDirectory`, `nanyx.dll`.
+let private dotnetNanyx (cliDirectory: string) =
+    let host = Environment.GetEnvironmentVariable "DOTNET_HOST_PATH" |> Option.ofObj |> Option.defaultValue "dotnet"
+    let start = ProcessStartInfo(host)
+    start.ArgumentList.Add(Path.Combine(cliDirectory, "nanyx.dll"))
+    start
+
+/// Runs `nanyx` with `arguments` in a process of its own: the CLI built beside the tests (`nanyx.dll`), started by the
+/// `dotnet` that runs them. For a command that measures the run, such as `run --profile`, which this process's
+/// collections of garbage would disturb: they stop its managed threads, though not the WebAssembly the run is executing
+/// (#2491).
+let nanyxProcess (arguments: string list) : RunOutcome =
+    runNanyx (dotnetNanyx AppContext.BaseDirectory) (Directory.GetCurrentDirectory()) arguments
+
+/// Runs `nanyx` with `arguments` in `workingDirectory`, started as a user starts it: `nanyx.exe` in `cliDirectory`, a
+/// spelling of the directory the CLI is built in, where there is one, and `nanyx.dll` there otherwise.
+let nanyxExecutableFrom (cliDirectory: string) (workingDirectory: string) (arguments: string list) : RunOutcome =
+    let executable = Path.Combine(cliDirectory, "nanyx.exe")
+    let start = if OperatingSystem.IsWindows() && File.Exists executable then ProcessStartInfo(executable) else dotnetNanyx cliDirectory
+    runNanyx start workingDirectory arguments
 
 /// Does what `nanyx` does with `arguments`, with the environment variables `variables` (see `nanyxWithInput`).
 let nanyxWithVariables (variables: (string * string) list) (arguments: string list) : RunOutcome =
@@ -732,8 +751,11 @@ let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
     Assert.True(isLinear atQuarter atN, $"{name}({n:N0}) took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {name}({n / 4:N0})")
 
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
-/// exported.
-let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
+/// exported, and what `define` defines in its linker besides WASI.
+let rec instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) = instantiateWatWith ignore wat dropped
+
+/// `instantiateWat`, with what `define` defines in the linker besides WASI: the imports of a debug build's probes, say.
+and instantiateWatWith (define: Wasmtime.Linker -> unit) (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     let dropName = Transpiler.Wasm.CoreIrDrop.dropName
     let exports =
         dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))") |> String.concat "\n"
@@ -745,6 +767,7 @@ let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     use module' = Wasmtime.Module.FromText(engine, "program", wat.Substring(0, wat.LastIndexOf ')') + exports + "\n)")
     use linker = new Wasmtime.Linker(engine)
     linker.DefineWasi()
+    define linker
     let instance = linker.Instantiate(store, module')
     match instance.GetAction CheckedExports.start with
     | null -> ()

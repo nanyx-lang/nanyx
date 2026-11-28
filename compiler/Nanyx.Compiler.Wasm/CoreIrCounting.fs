@@ -61,6 +61,9 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | CrashWith text -> [ text, Borrowed ]
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
+    // A probe before a call that never returns borrows the locals it writes, so they are still alive there: nothing
+    // after it reads them, and the program ends, so keeping them costs nothing on the way out (see `CoreIrProbes`).
+    | Probe(Crashing, locals) -> locals |> List.map (fun local -> AVar local.Var, Borrowed)
     | FloatConstant _
     | Crash _
     | Probe _
@@ -574,11 +577,69 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
         let dropped = if drops.IsEmpty then e else Expr.make (DropAfter(e, drops)) e.Type
         if dups.IsEmpty then dropped else Expr.make (Dup(dups, dropped)) e.Type
 
+/// `func` with each probe before a call that never returns (see `ProbeKind.Crashing`) writing only the locals it can
+/// read without changing what the code before it frees or reuses: not a value on the heap the code has already taken
+/// over on the way there, by an owning use or as a value a `match` takes apart, which may reuse its memory in place. Reading such a
+/// local would keep it alive past that use, which would copy where the code reused, in every run of a debug build, not
+/// only one that crashes: a loop that maps a list it owns, before a check that crashes, would copy the list each time
+/// round. The code runs in the order of its chains' links; after a branch, a local either branch took over counts as
+/// taken over. Each loop's body only borrows what it reads from outside, so nothing in it takes such a local over.
+let private crashingProbesTrimmed (ownership: Ownership) (func: Function) : Function =
+    let takenOverBy (e: Expr) =
+        operands ownership e |> List.choose (function AVar var, Owned when var.Kind <> Temp && isHeapType var.Type -> Some var.Id | _ -> None) |> Set.ofList
+    // `e`, with its crash probes trimmed, where `taken` were taken over before it, and what is taken over once it's done.
+    let rec walk (taken: Set<int>) (e: Expr) : Expr * Set<int> =
+        let links, last = Chain.split e
+        let mutable taken = taken
+        let links =
+            links
+            |> List.map (fun link ->
+                match link.Kind with
+                | Let(var, value, following) ->
+                    let value, after = walk taken value
+                    taken <- after
+                    { link with Kind = Let(var, value, following) }
+                | Do(value, following) ->
+                    let value, after = walk taken value
+                    taken <- after
+                    { link with Kind = Do(value, following) }
+                | _ -> link)
+        let last, after = walkLast taken last
+        Chain.rebuild Chain.relink links last, after
+    and walkLast (taken: Set<int>) (e: Expr) : Expr * Set<int> =
+        match e.Kind with
+        | Probe(Crashing, locals) -> { e with Kind = Probe(Crashing, locals |> List.filter (fun local -> not (taken.Contains local.Var.Id))) }, taken
+        | If(cond, ifTrue, ifFalse) ->
+            let ifTrue, afterTrue = walk taken ifTrue
+            let ifFalse, afterFalse = walk taken ifFalse
+            { e with Kind = If(cond, ifTrue, ifFalse) }, Set.union afterTrue afterFalse
+        | Match(scrutinees, arms) ->
+            // An arm may reuse the memory of a value it takes apart.
+            let inArms = Set.union taken (scrutinees |> List.filter (fun var -> isHeapType var.Type) |> List.map _.Id |> Set.ofList)
+            let arms, after =
+                arms
+                |> List.map (fun arm ->
+                    let body, after = walk inArms arm.Body
+                    { arm with Body = body }, after)
+                |> List.unzip
+            { e with Kind = Match(scrutinees, arms) }, Set.unionMany (inArms :: after)
+        | ForEach loop ->
+            let body, _ = walk taken loop.Body
+            { e with Kind = ForEach { loop with Body = body } }, Set.union taken (takenOverBy e)
+        | While loop ->
+            let condition, _ = walk taken loop.Condition
+            let body, _ = walk taken loop.Body
+            { e with Kind = While { loop with Condition = condition; Body = body } }, taken
+        | _ -> e, Set.union taken (takenOverBy e)
+    let hasCrashingProbe = nodes func.Body |> Seq.exists (fun e -> match e.Kind with Probe(Crashing, _) -> true | _ -> false)
+    if hasCrashingProbe then { func with Body = fst (walk Set.empty func.Body) } else func
+
 /// `functions` with reference counting inserted, by the parameters `ownership` says each owns.
 let internal insert (ownership: Ownership) (functions: Function list) : Function list =
     let addressResults = inferAddressResults functions
     let owningEntries = CoreIrClosureEntries.owningEntries functions
     functions
+    |> List.map (crashingProbesTrimmed ownership)
     |> List.map (fun func ->
         let owned =
             func.Params
