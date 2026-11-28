@@ -192,8 +192,9 @@ way.
 
 `TypeResolution` reads a product or quotient as the measured value of the product or quotient of its sides'
 dimensions (`Dimension.multiply`, `Dimension.divide`), which add or take off exponents and keep the base dimensions in
-order, each once, with none whose exponent is zero: `Length * Time / Time` is `Length`, and a dimension of nothing is a
-plain number (`Dimension.measured`). Two measured values are of one type when their dimension lists and storages are one,
+order of their names, each once, with none whose exponent is zero: `Length * Time / Time` is `Length`, and a dimension of
+nothing is a plain number (`Dimension.measured`). The order is by name, and by home module only between two dimensions of
+one name, so a dimension is written the same however its program is compiled, from files or from memory. Two measured values are of one type when their dimension lists and storages are one,
 so `Speed(float)` and `Length(float) / Time(float)` are one type.
 
 The parts share one storage. `DimensionSignatures` gives the bare parts of a derived dimension in a signature the
