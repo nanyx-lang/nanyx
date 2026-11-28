@@ -30,7 +30,7 @@ println(next(2))
 [<Fact>]
 let ``A generic top-level value is built once for each type it is read at`` () =
     let source =
-        """def nothing = dbg([])
+        """def nothing: list(a) = dbg([])
 
 def ints: list(int) = nothing
 def moreInts: list(int) = nothing
@@ -45,7 +45,7 @@ println(strings == [])
 [<Fact>]
 let ``A generic record value read again and again at one type is allocated once`` () =
     let source =
-        """def box = (items = [], size = 0)
+        """def box: (items: list(a), size: int) = (items = [], size = 0)
 
 def sizes = { n: int ->
   def b: (items: list(int), size: int) = box
@@ -95,3 +95,22 @@ println(limit)
 """
     let wat = transpileWat source
     Assert.DoesNotContain("$limit__built", wat)
+
+[<Fact>]
+let ``Run - an empty list value, a list of undefined, is read as lists of different types`` () =
+    let source =
+        """def nothing = []
+
+def f: list(int) -> int = { xs -> list.length(xs) }
+
+def pair = (nothing, nothing)
+
+def typed: (list(int), list(string)) = pair
+
+println(f(nothing))
+println(nothing ++ ["a"])
+println([1] ++ nothing)
+println(typed.0 ++ [2])
+println(typed.1 ++ ["z"])
+"""
+    runSource source |> assertRan "0\n[a]\n[1]\n[2]\n[z]\n"

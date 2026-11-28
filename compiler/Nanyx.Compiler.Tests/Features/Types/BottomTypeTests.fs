@@ -111,9 +111,10 @@ let ``A function whose result is a variable found nowhere else in its type gives
             + "def empty = { -> [] }\ndef id = { x -> x }\n")
     Assert.Equal("a -> undefined", asciiTypeIn typed "loop")
     Assert.Equal("a -> b -> undefined", asciiTypeIn typed "curried")
-    // A result that is in the input's type, or inside another type, is as generic as before.
+    // A result that is in the input's type is as generic as before. A `[]` nothing says the elements of is a
+    // `list(undefined)` (#3129).
     Assert.Equal("list(int) -> #some(int) | #emptyList", asciiTypeIn typed "first")
-    Assert.Equal("() -> list(a)", asciiTypeIn typed "empty")
+    Assert.Equal("() -> list(undefined)", asciiTypeIn typed "empty")
     Assert.Equal("a -> a", asciiTypeIn typed "id")
 
 [<Fact>]
