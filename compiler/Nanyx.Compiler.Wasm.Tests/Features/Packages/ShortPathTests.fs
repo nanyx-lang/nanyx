@@ -45,9 +45,29 @@ let ``A path with no short names is given back as it is`` () =
     use directory = new TempDirectory()
     Assert.Equal(directory.Path, LongPaths.ofPath directory.Path)
 
+/// A directory with a long name in the temporary directory that is a junction to `target`, which `use` removes, and not
+/// what it points to. CI's runners build on a volume that makes no 8.3 names, and keep the temporary directory on one
+/// that does, so a path through the junction is the compiler's directory with a short name in it, as a user's profile
+/// is (`C:\Users\RICHAR~1\...`).
+type private Junction(target: string) =
+    let holder = new TempDirectory()
+    let path = Path.Combine(holder.Path, "the compiler's own directory")
+    do
+        let made = Diagnostics.Process.Start(Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{path}\" \"{target}\"", UseShellExecute = false, RedirectStandardOutput = true))
+        made.WaitForExit()
+        if made.ExitCode <> 0 then failwith $"mklink /J gave {made.ExitCode}"
+    member _.Path = path
+    interface IDisposable with
+        member _.Dispose() =
+            // Removing the junction itself leaves the directory it points to as it was.
+            Directory.Delete path
+            (holder :> IDisposable).Dispose()
+
 [<Fact>]
 let ``The compiler started through the short path of its directory builds a package under a shipped host`` () =
-    let cliDirectory = shortOrSkip (Path.TrimEndingDirectorySeparator AppContext.BaseDirectory)
+    if not (OperatingSystem.IsWindows()) then raise (Xunit.Sdk.SkipException.ForSkip "only Windows has 8.3 short names")
+    use junction = new Junction(Path.TrimEndingDirectorySeparator AppContext.BaseDirectory)
+    let cliDirectory = shortOrSkip junction.Path
     use directory = new TempDirectory()
     File.WriteAllText(
         Path.Combine(directory.Path, "demo.nyxp"),
