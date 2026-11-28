@@ -22,7 +22,7 @@ internal static partial class CliCommands
     /// files binds or gives (see <c>ShownValues</c>). With <paramref name="debugFrom"/>, a package's directory or a script's,
     /// it runs under the debugger instead (see <see cref="Debug"/>).
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, string? showValuesOf = null, string? debugFrom = null)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, string? showValuesOf = null, string? debugFrom = null, DebugMode? debugMode = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
@@ -45,7 +45,7 @@ internal static partial class CliCommands
 
         if (debugFrom is not null)
         {
-            return Debug(shell, result, wasm, wat, programArguments, directories, packageRoot, debugFrom, errors);
+            return Debug(shell, result, wasm, wat, programArguments, directories, packageRoot, debugFrom, debugMode, errors);
         }
 
         // The program's output follows the run's box, unmarked, and so does what the run reports after it.

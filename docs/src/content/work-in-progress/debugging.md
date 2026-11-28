@@ -46,8 +46,6 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   and give every frame its locals as of its call ([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crash's
   frame could have its locals from a probe of its own before each call that never returns
   ([#3257](https://github.com/nanyx-lang/nanyx/issues/3257)).
-- **The debugger's input,** which is empty: VS Code could run the program in its terminal (`runInTerminal`), with the
-  protocol on a socket, so that a program that reads input can be debugged.
 - **The recording's format,** how tasks interleave in it once async has them, and whether users keep recordings
   ([#2042](https://github.com/nanyx-lang/nanyx/issues/2042)).
 - **Stepping backwards:** how often to snapshot, and how the adapter presents it
@@ -78,7 +76,7 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 
 | Step | Issue | After |
 |---|---|---|
-| The debug adapter: breakpoints, stepping and variables, in VS Code: built ([Debugger](../standard-tools/debugger), [VS Code](../standard-tools/vs-code-extension#debugging)); the program's input next | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | |
+| The debug adapter: breakpoints, stepping and variables, in VS Code, with the program in a terminal: built ([Debugger](../standard-tools/debugger), [VS Code](../standard-tools/vs-code-extension#debugging)) | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | |
 | Every frame's locals as of its call, by printers with a budget | [#3253](https://github.com/nanyx-lang/nanyx/issues/3253) | #2041 |
 | The crashing frame's locals, from a probe before each call that never returns | [#3257](https://github.com/nanyx-lang/nanyx/issues/3257) | #2041 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
