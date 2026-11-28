@@ -1,6 +1,7 @@
 /// A type or name error in a module a program imports is deferred, as one in the file being run is: the module is
 /// imported, its other definitions work, and the program stops where it reaches the error, which names the file and
-/// line in that module. An error that can't be deferred, such as a syntax error, still stops the build (#2967).
+/// line in that module. An error that can't be deferred, such as a syntax error, still stops the build (#2967). A frame
+/// of a module the program imports names its function as the backend does, after its module (#3221).
 module TranspilerWasmTests.Features.Errors.ImportedDeferredErrors
 
 open Xunit
@@ -20,7 +21,7 @@ let ``nanyx run of an entry that imports a module with a type error runs up to t
     Assert.Equal("9\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     let errors = outcome.StandardError.ReplaceLineEndings "\n"
     Assert.Contains("Running with 1 deferred error\n", errors)
-    Assert.Contains(deferredAt + "  perimeter (src/shapes.nyx:5)\n  main (src/main.nyx:8)\n", errors)
+    Assert.Contains(deferredAt + "  shapes_perimeter (src/shapes.nyx:5)\n  main (src/main.nyx:8)\n", errors)
 
 [<Fact>]
 let ``A module's deferred error reached through a module that imports it names the module it is in`` () =
@@ -29,7 +30,7 @@ let ``A module's deferred error reached through a module that imports it names t
     let outcome, _ = nanyxOnPackage [ "shapes.nyx", shapes; "edges.nyx", edges; "main.nyx", main ] [ "run"; "{package}" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput.ReplaceLineEndings "\n")
-    Assert.Contains(deferredAt + "  perimeter (src/shapes.nyx:5)\n  edge (src/edges.nyx:5)\n  main (src/main.nyx:8)\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Contains(deferredAt + "  shapes_perimeter (src/shapes.nyx:5)\n  edges_edge (src/edges.nyx:5)\n  main (src/main.nyx:8)\n", outcome.StandardError.ReplaceLineEndings "\n")
 
 [<Fact>]
 let ``A module two others import reports its deferred error once`` () =
@@ -45,7 +46,7 @@ let ``A module two others import reports its deferred error once`` () =
     Assert.Equal(1, occurrences errors "error NYX0201: Type mismatch\n")
     Assert.Equal(1, occurrences errors deferredAt)
     Assert.Equal("9\n", outcome.StandardOutput.ReplaceLineEndings "\n")
-    Assert.Contains("  rightEdge (src/right.nyx:5)\n", errors)
+    Assert.Contains("  right_rightEdge (src/right.nyx:5)\n", errors)
 
 [<Fact>]
 let ``nanyx check and a release build of an entry that imports a module with a type error fail`` () =
