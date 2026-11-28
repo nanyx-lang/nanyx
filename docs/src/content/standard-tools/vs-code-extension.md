@@ -427,8 +427,13 @@ The extension adds a `nanyx` debug type, run by the [debugger](./debugger), `nan
 starts with the `nanyx` it [found](#finding-the-compiler). Press F5 in a `.nyx` editor, or choose **Debug** from the run
 button at the top right of the editor, or **Nanyx: Debug the current file** from the command palette, and the active
 file is debugged with no `launch.json`. Breakpoints are set in the gutter of a `.nyx` file. The Run and Debug view then
-steps the program, shows its stack and a frame's variables, and stops where it crashes. What the program writes is in
-the Debug Console, and its input is empty.
+steps the program, shows its stack and a frame's variables, and stops where it crashes.
+
+The program runs in a terminal of its own in the panel, so it reads what you type there and writes there, as a run
+does. The debugger listens on a port of 127.0.0.1 that the system chooses (`nanyx run --debug --dap-port 0`), and the
+session connects to it. With `"console": "debugConsole"`, what the program writes is in the Debug Console instead, and
+its input is empty. Where there is no terminal to run it in, as in VS Code for the web, it runs that way, and the Debug
+Console says so. If the debugger doesn't start, because the program doesn't compile, say, its terminal says why.
 
 A `launch.json` configuration of type `nanyx` names what to debug. Its snippets, **Nanyx: Debug the current file** and
 **Nanyx: Debug a package**, write one:
@@ -449,6 +454,7 @@ A `launch.json` configuration of type `nanyx` names what to debug. Its snippets,
 | `program` | The script, or a package's directory, to debug. Without it, the active file. |
 | `args` | The program's command-line arguments. |
 | `stopOnEntry` | Stops the program at its first statement. |
+| `console` | Where the program reads and writes: `integratedTerminal`, a terminal of its own, which is the default, or `debugConsole`, the Debug Console, with no input. |
 | `cwd` | The directory the program runs in. Without it, the script's directory, or the package's. |
 
 How breakpoints move to a line with a statement, how stepping goes, and which locals a frame further out shows are on

@@ -232,7 +232,7 @@ let private command (arguments: string list) : Shell -> int =
             | "--dbg-to" :: file :: rest -> file, rest
             | _ -> null, rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory, showValues, debug)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory, showValues, (if debug then DebugMode(System.Nullable(), null) else null))
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest
