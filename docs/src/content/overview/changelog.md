@@ -8,6 +8,58 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.54.0
+
+*28 November 2026*
+
+Values can be formatted: a `Format` context writes numbers, text, instants and unit quantities by a spec after
+Python's, and a string's hole takes one, `"{price:.2f}"`. Live mode re-runs tests too and can show every value, and
+`undefined` no longer leaks through a type's arguments. Two changes may need edits: a value built from `[]` with no type
+written is a `list(undefined)`, no longer generic, and a `:` in an interpolated string's hole now starts a format spec,
+so an assignment written in a hole needs brackets, `{(x := 1)}`.
+
+**Language**
+
+- A string's hole takes a format spec after a `:`: `"{price:.2f}"`, `"{count:,}"`, `"{name:>8}"`, `"{elapsed:.1f ms}"`.
+  A spec the value's type doesn't take is an error when the program compiles, [NYX0307](../standard-tools/errors#nyx0307)
+  ([Strings](../getting-started/basics#strings)).
+- `undefined` joins with the other type inside a type's arguments: `[1, 2] ++ e` and `if c then e else xs` are a
+  `list(int)` whichever side holds `undefined`, and an `MArray(undefined)` is no `MArray(int)`. A `[]` nothing says the
+  elements of is a `list(undefined)`, so `items \head` is `#emptyList`, and a match on it needs no `#some` arm
+  ([Top and bottom types](../tour/types#top-and-bottom-types)).
+
+**Standard library**
+
+- `format(value, spec)` writes a number, string, char, bool, `Instant` or unit quantity by a spec after Python's:
+  `format(1234567, ",")` is `"1,234,567"`, `format(3.14159, ".2f")` is `"3.14"`, and `format(1500ms, ".1f s")` is
+  `"1.5s"`. `x \tryFormat(spec)` gives `#badFormat` with the reason instead of stopping the program
+  ([prelude: format](../stdlib/prelude-format)).
+- `nanyx.analysis` and `nanyx.analysis.host` ship: the types a linter written in Nanyx is written against, and the host
+  that runs one. Running such a linter from a manifest is still to come ([Linters](../advanced/linters)).
+
+**Tools**
+
+- Live mode in VS Code re-runs a saved file's tests too, updating the Testing view and their `dbg` values, with an
+  `@test(#io)` test's files kept in memory. `nanyx test --files-in-memory` does the same from the command line
+  ([Live mode](../standard-tools/vs-code-extension#live-mode), [`nanyx test`](../standard-tools/command-line#nanyx-test)).
+- Live mode can show every value, as `= 84` at the end of its line, from the Live mode view or
+  **Nanyx: Toggle showing every value**; `nanyx run --show-values` writes them to the `--dbg-to` channel
+  ([Live mode](../standard-tools/vs-code-extension#live-mode)).
+- The official linter's new `undefinedPayloadArm` hint draws an arm for a tag that can never match faint, with a fix
+  that removes it ([Official linter](../standard-tools/official-linter)).
+- Crash stacks, deferred errors, debug probes and profiles name each function as the program writes it, `perimeter`,
+  `helper`, `list.map`, rather than by the compiler's name for it ([Crash stacks](../deep-dives/crash-stacks)).
+- A unit too large or too small for its dimension's storage is [NYX0306](../standard-tools/errors#nyx0306), where every
+  value of it was `Infinity`, and a dimension declared twice in one module is
+  [NYX0113](../standard-tools/errors#nyx0113).
+
+**Fixes**
+
+- A program's own definition, or one it imports, named like a function the prelude exports, such as `ignore`, no
+  longer breaks the program: the program calls its own, and the library and the host keep calling theirs.
+- A unit literal beside a quotient of literals, as in `10m / 2s / 1s`, takes the quotient's `float`.
+- Types that name each other compile quickly, where a group of many took minutes.
+
 # 0.53.0
 
 *27 November 2026*

@@ -48,7 +48,7 @@ Linters are declared in the `linters` list of the package manifest (the `.nyxp` 
   linters = [
     (
       package = "nanyx.lint"
-      version = "0.53.0"
+      version = "0.54.0"
       settings = (rules = (unusedBindings = #warning, shadowedPreludeNames = #info, unusedResults = #warning))
     )
   ]
@@ -58,7 +58,7 @@ Linters are declared in the `linters` list of the package manifest (the `.nyxp` 
 A linter runs only if the manifest has an entry for it, so removing the `nanyx.lint` entry uninstalls the default linter. An entry without `settings` runs every rule at its default severity:
 
 ```nanyx fragment
-linters = [(package = "nanyx.lint", version = "0.53.0")]
+linters = [(package = "nanyx.lint", version = "0.54.0")]
 ```
 
 A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linter` directives at the top of the file; without any, it runs none. `::linter nanyx.lint` turns the official linter on, as its entry without `settings` would, and each `::lint` line under it sets one of its rules' severity, `::lint unusedBindings #error`. A `::lint` line is for the linter of the nearest `::linter` above it. As in a manifest, only the linters the directives name run:

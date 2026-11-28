@@ -58,7 +58,7 @@ root and prelude:
   package = (
     name = "acme.lint"
     version = "1.0.0"
-    nanyx = "0.53"
+    nanyx = "0.54"
     sources = ["src/**/*.nyx"]
     linter = (
       root = "acme.lint"
@@ -73,7 +73,7 @@ root and prelude:
       ]
     )
   )
-  dependencies = [(package = "nanyx.analysis", version = "0.53.0")]
+  dependencies = [(package = "nanyx.analysis", version = "0.54.0")]
 )
 ```
 
