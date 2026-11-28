@@ -173,8 +173,13 @@ The derived `tryFormat` calls the prelude's `__measuredTryFormat` with the numbe
 and scales of the units a spec may name (the dimension's own, a derived dimension's own declared units among them), the
 units to pick from when the spec names none (the same, or for a derived dimension its parts' display units multiplied
 and divided), the default display unit's name, the text around a number of default storage units, and the dimension's
-name for a `BadFormat`. The helper takes the unit named after the spec's last space, writes the number in it with
-`float.tryFormat`'s reader, and appends the unit's name. A name no unit has is `#badFormat` at the name.
+name for a `BadFormat`, and, for a composite unit, each unit of each of the dimension's base parts with the part's
+position and its scale, and each part's power and name, in the order `Dimension.text` writes them. The helper takes the
+unit named after the spec's last space, or else reads the text there as a composite (`fmtComposite`), summing each part's
+power and multiplying the scales, and takes it when the powers are the dimension's. It writes the number in the unit
+with `float.tryFormat`'s reader, and appends the unit as written. A name no unit has is `#badFormat` at the name, and a
+composite of another dimension says what its units make. The compiler's `FormatSpecs` reads the same, from the same data
+(`FormatSpecChecks`), and the shared spec table tests both.
 
 # Derived dimensions
 
