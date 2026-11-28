@@ -60,6 +60,8 @@ let private withoutExamples =
       DiagnosticCodes.PackageFileNotUtf8
       DiagnosticCodes.UnlistedVersion
       DiagnosticCodes.ShippedPackageDiffers
+      DiagnosticCodes.ShippedPackageReplaced
+      DiagnosticCodes.ShippedPackagesNotSeeded
       DiagnosticCodes.BackendInternalError ]
     |> List.map _.Code
 
