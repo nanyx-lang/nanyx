@@ -90,3 +90,20 @@ def main = {{
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
     Assert.Equal("crash: no\n", withoutStack outcome.StandardError)
+
+[<Fact>]
+let ``Run - the head of a list of undefined is #emptyList, with or without an arm for #some (#3129)`` () =
+    // `list.head` is compiled at an `a` of `undefined`, whose `#some(a)` no value has.
+    let source =
+        normalized """def items = []
+
+match items \head
+  | #emptyList -> println("empty")
+
+match items \head
+  | #some(x) -> println("some")
+  | #emptyList -> println("empty again")
+
+println(list.length(items))
+"""
+    runSource source |> assertRan "empty\nempty again\n0\n"

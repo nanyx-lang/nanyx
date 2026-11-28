@@ -283,7 +283,10 @@ let internal inferMatch
                 if index < patterns.Length then Some patterns.[index] else None)
         // For the exhaustiveness check, the scrutinees' types are resolved before the arms add their constraints.
         let resolvedScrutineeTypes = ScrutineeRests.resolve env current scrutineeTypes
-        let missingWitnesses = PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some)
+        // A tag whose payload only `undefined` has been given for has no values, as it won't once the def is generalised
+        // (see `LowerBounds`), so the match needs no arm for it.
+        let missingWitnesses =
+            PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map (LowerBounds.asSettled current >> Some))
         // An arm for a tag the scrutinee's closed union doesn't have can never match: it is reported, and the arms
         // are not typed, so the tag it names isn't added to the union as well.
         errors <- UnknownTagArms.ofArms resolvedScrutineeTypes arms

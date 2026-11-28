@@ -448,6 +448,10 @@ type InferState =
             /// The element type of each `[]` inferred, a variable of its own then: one still free where its def is
             /// generalised is `undefined` (see `EmptyLists`).
             EmptyListElements: TyVar list;
+            /// Each type given where another is expected that holds `undefined` where a value of it gives one out (see
+            /// `Unifier.holdsBottom`), with the type expected: a variable it meets there takes nothing from it while the
+            /// constraints are solved, and is `undefined` if nothing else says what it is (see `LowerBounds`).
+            BottomGiven: (Ty * Ty) list;
             /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
             /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`). A record literal that a
             /// record type is expected of is one too, its fields' values the arguments.
@@ -618,6 +622,7 @@ let emptyState =
             Cells = Map.empty;
             CellsOutsideMemory = Set.empty;
             EmptyListElements = [];
+            BottomGiven = [];
             ArgumentSpans = Map.empty;
             BranchSpans = Map.empty;
             AnnotationSpans = Map.empty;
@@ -872,8 +877,12 @@ let internal recordReference (expr: Expression) (scheme: TypeScheme) (state: Inf
 let internal addConstraint left right (state: InferState) =
     { state with Constraints = (left, right, Equal, state.Origin) :: state.Constraints }
 
+/// `state` noting that `left`, given where `right` is expected, holds `undefined` there, if it does (see `BottomGiven`).
+let private noteBottomGiven left right (state: InferState) =
+    if Unifier.holdsBottom left then { state with BottomGiven = (left, right) :: state.BottomGiven } else state
+
 let internal addAssignableConstraint left right (state: InferState) =
-    { state with Constraints = (left, right, Assignable, state.Origin) :: state.Constraints }
+    { state with Constraints = (left, right, Assignable, state.Origin) :: state.Constraints } |> noteBottomGiven left right
 
 /// `state` noting that what is at `origin` is checked against `declared`, the type written at `written`, as a def's value
 /// is against its annotation, which a mismatch there calls `label` (see `AnnotationSpans`). A made-up span is left out.
@@ -911,7 +920,7 @@ let internal addConstraintAt (span: SourceSpan) left right (state: InferState) =
 /// `addAssignableConstraint`, reported at `span` rather than at the expression being inferred.
 let internal addAssignableConstraintAt (span: SourceSpan) left right (state: InferState) =
     let origin = if SourceSpan.isNone span then state.Origin else span
-    { state with Constraints = (left, right, Assignable, origin) :: state.Constraints }
+    { state with Constraints = (left, right, Assignable, origin) :: state.Constraints } |> noteBottomGiven left right
 
 /// Where the declaration `holder` makes as `declarer` writes its name, or `holder`'s own span if the parser saw none.
 let internal declarationSpan (state: InferState) (declarer: Declarer) (holder: Expression) : SourceSpan =
