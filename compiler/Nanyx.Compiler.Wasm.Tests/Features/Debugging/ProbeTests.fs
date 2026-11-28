@@ -101,6 +101,15 @@ let ``The shadow stack at a statement has a frame for each function the program 
     Assert.Equal<string list>([ "sum (main.nyx:7)"; "<top level> (main.nyx:11)" ], heard.Stacks.[inFold])
 
 [<Fact>]
+let ``A function's entry names it as it is written, though the backend names a def that shadows the library's otherwise`` () =
+    // The prelude exports an `ignore` too, so the backend names this one `main_ignore` (#3223).
+    let heard = listen (fun _ -> false) "def ignore = { n: int -> n + 1 }
+
+println(ignore(1))
+"
+    Assert.Contains("entry ignore 1", heard.Passed)
+
+[<Fact>]
 let ``A frame's locals are written as dbg writes them, those still alive where the program is`` () =
     Assert.Equal<(string * string) list>([ "xs", "[1, 2, 3]" ], (listen (statementAt 7) program).Locals)
     Assert.Equal<(string * string) list>([ "n", "6" ], (listen (statementAt 2) program).Locals)

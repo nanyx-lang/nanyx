@@ -947,9 +947,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         if options.Places then
             definitionFunctions
             |> List.filter (fun func -> not (func.Name.StartsWith "__"))
-            |> List.choose (fun func ->
+            // By the function's name, which a frame has, and by its definition's, which a probe's entry has.
+            |> List.collect (fun func ->
                 let written = typed.WrittenNames |> Map.tryFind func.Source |> Option.defaultValue func.Source
-                if written = func.Name then None else Some (CoreIrEmit.nameMarker func.Name written))
+                [ func.Name; func.Source ] |> List.filter ((<>) written) |> List.map (fun name -> CoreIrEmit.nameMarker name written))
             |> List.distinct
         else []
     let definitionFunctions, startFunction, owningEntries, ownership =
