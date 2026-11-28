@@ -35,13 +35,18 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
   without the probes, for an embedder such as a page that keeps `dbg` apart from what the program writes.
 - A module's imports are inlined into it, so the backend compiles one module: each import's definitions, and what
   they inlined in turn, under the names `ModuleLinking.inlinedRenames` gives them. A private definition is named after
-  its module (`helpers.helper`), and an export after the import's alias (`m.helper`), or by its own name when an import
-  brings it in unqualified. In a module that isn't the program's own, as a host's or a library's
-  (`MergedImports.QualifiesImports`), an export brought in unqualified is named after its module too, and the module's
-  references to it are written so (`writeBlockAliases`). Otherwise a host that imports `within` from another module
-  would carry it into the program as `within`, beside or in place of a `within` of the program's own
-  ([#2995](https://github.com/nanyx-lang/nanyx/issues/2995)). The standard library's definitions keep the one name
-  every module shares.
+  its module (`helpers.helper`), and an export after the import's alias (`m.helper`), or, when an import brings it in
+  unqualified, after its module too, and the importer's references to it are written so (`writeBlockAliases`).
+  Otherwise a host that imports `within` from another module would carry it into the program as `within`, beside or in
+  place of a `within` of the program's own ([#2995](https://github.com/nanyx-lang/nanyx/issues/2995)), and a program's
+  own `import utils` would bring its `ignore` in beside the prelude's
+  ([#3221](https://github.com/nanyx-lang/nanyx/issues/3221)). The standard library's definitions keep the one name
+  every module shares, and so do a definition attached to a type (`Regex.toString`), which an instance finds by its
+  type's name, and a block's, which is named after its file's module already (`lib.outer.twice`). A module's own
+  top-level definition named like one of the library's inlined into it is named after the module in the backend
+  (`main.ignore`, `CheckedModule.OwnRenames`), and its references to it are written so: the library's definition is
+  kept, so the library's code, and the host's, which calls `ignore(provide(entry))`, still reach it. Its importers read
+  the module by the names it writes.
 - How values are laid out and freed is in [Memory management](./memory-management), and how context members are
   passed in [Context calls](./context-calls).
 

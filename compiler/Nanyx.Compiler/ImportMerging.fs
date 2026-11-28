@@ -48,10 +48,7 @@ module internal ImportMerging =
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list
           /// The modules merged, by `originKey`.
-          Merged: Set<string>
-          /// Whether the module is not the program's own, as a host's or a library's, whose imports' definitions are
-          /// all inlined under qualified names (see `ModuleLinking.inlinedRenames`).
-          QualifiesImports: bool }
+          Merged: Set<string> }
 
     /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
@@ -104,17 +101,16 @@ module internal ImportMerging =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
-        // In a module that isn't the program's own, an import's definitions are inlined under qualified names, but the
-        // standard library's, which every module shares under one name. That is safe only because the standard library
-        // selects nothing but types from its imports (`import nanyx/async as (Async)`), so no program's def can take the
-        // place of one of its functions (#2995). If it ever selects a function by name, that import has to be
-        // qualified like the rest.
+        // An import's definitions are inlined under qualified names, so that none takes the place of the importer's, of
+        // the library's or of another module's of its name (#2995, #3221), but the standard library's, which every module
+        // shares under one name. That is safe only because the standard library selects nothing but types from its
+        // imports (`import nanyx/async as (Async)`), so no program's def can take the place of one of its functions. If
+        // it ever selects a function by name, that import has to be qualified like the rest.
         let qualifies =
-            merged.QualifiesImports
-            && (match importedOrigin with
-                | StandardLibraryModule _ -> false
-                | SourceFile _
-                | InMemory -> true)
+            match importedOrigin with
+            | StandardLibraryModule _ -> false
+            | SourceFile _
+            | InMemory -> true
         // The members of each context a host provides, `Console`, are brought in as the module's
         // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
         // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
@@ -163,7 +159,7 @@ module internal ImportMerging =
         let exportedTypes = ModuleLinking.exportedTypes imported
         let exportedValueTypes =
             hostMembers
-            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (ModuleLinking.withBlockReExports imported imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name))
+            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (ModuleLinking.withBlockReExports imported (ModuleLinking.ownTypes imported) |> Map.filter (fun name _ -> exportedValues.Contains name))
         let exportedTypeDefs =
             ModuleLinking.withBlockReExports imported imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
         let exports = hostMembers |> List.fold (fun acc (name, _, symbol) -> acc |> Map.add name symbol) (ModuleLinking.withBlockReExports imported imported.Exports)
@@ -232,15 +228,23 @@ module internal ImportMerging =
                 let hidden = unselected.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
                 typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && visible.ContainsKey name)),
                 Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
-        // A function that requires a context requires it wherever it is called, under the name it is imported as.
+        // A function that requires a context requires it wherever it is called, under the name it is imported as. A
+        // value the import brings in replaces one of its name brought in before, the prelude's as the module's imports
+        // replace it, and so do the contexts it requires, or that it requires none (#3173).
+        let replaced =
+            exportedValueTypes.Keys |> Seq.filter isSelected |> Seq.map (ModuleLinking.importedName qualifier) |> Set.ofSeq
         let contextRequirements =
             ModuleLinking.withBlockReExports imported imported.ContextRequirements
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts) state.ContextRequirements
+            |> Map.fold
+                (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts)
+                (state.ContextRequirements |> Map.filter (fun name _ -> not (replaced.Contains name)))
         let contextSignatures =
             ModuleLinking.withBlockReExports imported imported.ContextSignatures
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
+            |> Map.fold
+                (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature)
+                (state.ContextSignatures |> Map.filter (fun name _ -> not (replaced.Contains name)))
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
         // A unit is written unqualified, as in `500ms`, under an alias too: an import brings in the units its module
         // exports, or those it selects. Two units of one name are ambiguous where the name is written (see `Units`), but
@@ -336,8 +340,8 @@ module internal ImportMerging =
                         // A type is inlined under its own name.
                         | None, Some symbol -> acc |> Map.add written (symbol, target)
                         | None, None -> acc) state.ImportedBlockNames
-                    // In a module that isn't the program's own, a name an import brings in unqualified is written as
-                    // the name its definition is inlined under, which is qualified.
+                    // A name an import brings in unqualified is written as the name its definition is inlined under,
+                    // which is qualified, but for the standard library's.
                     |> fun names ->
                         if qualifies && qualifier.IsNone then
                             exportedValues

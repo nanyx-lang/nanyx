@@ -201,6 +201,7 @@
     <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
+    <Compile Include="Features\Names\RunOwnNamesTests.fs" />
     <Compile Include="Features\Names\RunImportedTypeInstanceTests.fs" />
     <Compile Include="Features\Names\RunModuleBlockTests.fs" />
     <Compile Include="Features\Names\RunAttachedThroughAliasTests.fs" />

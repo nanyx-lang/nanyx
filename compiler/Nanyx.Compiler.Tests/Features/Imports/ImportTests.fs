@@ -144,10 +144,11 @@ export def unused = { 5 }""" ]
     let result = compileImportingAll modules "module main\nimport mod\ndef x = a()"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let names = valueDefinitionNames result
-    Assert.Contains("a", names)
+    // The program's own import is inlined under its module's name, as other packages' are (#3221).
+    Assert.Contains("mod.a", names)
     Assert.Contains("mod.b", names)
     Assert.Contains("mod.c", names)
-    Assert.DoesNotContain("unused", names)
+    Assert.DoesNotContain("mod.unused", names)
 
 [<Fact>]
 let ``Only the standard-library definitions a program reaches are inlined`` () =
