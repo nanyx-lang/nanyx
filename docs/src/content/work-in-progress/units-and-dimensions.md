@@ -57,6 +57,11 @@ dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is 
    each type with a `Num` and one the compiler derives for each two dimensions. Open: whether that is worth what it
    changes, the type inferred for every unannotated division and which context an operator is read through (see
    [Operators find their context](../advanced/contexts#operators-find-their-context)).
+6. **Dividing two values of one dimension with the types unwritten.** A dimension has no `Num`, since `Num`'s `*` would
+   make `m * m` a length, so `def ratio = { a, b -> a / b }` can't take two lengths: `ratio(4cm, 2cm)` is a missing `Num`,
+   which says to write the parameters' types (#3238). Giving a dimension `/` through a context would mean splitting
+   `Num`'s operators into contexts of their own, which moves which context every operator on a type variable is read
+   through. Open: whether that is worth it, and whether question 5's `Div(a, b, c)` would answer this one too.
 
 # Prior art
 
