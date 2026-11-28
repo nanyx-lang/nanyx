@@ -246,7 +246,8 @@ Two storages on its parts, and a part that is no dimension, are errors
 A function that divides or multiplies two of its parameters writes their types, as `speed` does. Without them, `/` is
 read through [`Num`](./contexts#operators-find-their-context), whose `/` takes its operands as one type, so
 `def speed = { d, t -> d / t }` called with a `Length` and a `Time` is a mismatch, which shows the def with the
-parameters' types written.
+parameters' types written. Called with two `Length`s, it is a missing `Num`, since a dimension has none (`Num`'s `*` would
+make `m * m` a length), which shows the same.
 
 ## Units of a derived dimension
 

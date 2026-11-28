@@ -39,3 +39,16 @@ let ``Two numbers, and two dimensions the def doesn't divide, are not this misma
     let diagnostic = (Compiler.compile source).Diagnostics.Head
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.DoesNotContain("write the parameters' types", diagnostic.Message)
+
+[<Fact>]
+let ``Dividing two values of one dimension in a def that writes no types is the missing Num, with the def to copy`` () =
+    let source = withFinalNewline (distance + "def ratio = { a, b -> a / b }\n\ndef r = ratio(4cm, 2cm)")
+    let result = Compiler.compile source
+    Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], result.Diagnostics |> List.map _.Code)
+    let diagnostic = result.Diagnostics.Head
+    Assert.Equal("ratio", textAt source (spanOf diagnostic))
+    Assert.Equal(
+        "'ratio' divides 'a' and 'b' with `/` and doesn't write their types, so it reads `/` through 'Num', which a dimension doesn't have: here both are 'Distance(int)'. To divide values of a dimension, write the parameters' types: `def ratio = { a: Distance(int), b: Distance(int) -> a / b }`",
+        diagnostic.Message)
+    Assert.Equal<string list>([ "/" ], diagnostic.Related |> List.map (fun (at, _) -> textAt source at))
+    compileClean (withFinalNewline (distance + "def ratio = { a: Distance(int), b: Distance(int) -> a / b }\n\ndef r = ratio(4cm, 2cm)")) |> ignore

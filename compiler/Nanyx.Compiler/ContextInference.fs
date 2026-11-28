@@ -468,20 +468,26 @@ module internal ContextInference =
     /// function, if one of `calls` in its value requires a parameterised context of a type its value leaves open:
     /// `def obj = parse("x")` with `parse: [Decode(a)] string -> a`. A value can't require a context, and its type is
     /// not settled by how it is used later, so `def person: Person = obj` doesn't find the instance: the type is passed
-    /// as a type argument or written on the def.
+    /// as a type argument or written on the def. Only the context's own arguments count: an associated type the value's
+    /// type is, as `Num(a).fraction` is, is the instance's to decide, so where the context's own arguments are fixed and
+    /// there is no instance, that is the error (#3238).
     let unfixedValueType (state: InferState) (name: Identifier) (span: SourceSpan) (defTy: Ty) (calls: PendingContextInstance list) : Diagnostic list =
         let defTy = resolveSoFar state defTy
         match Unifier.unalias defTy with
         | TyFunc _ -> []
         | _ ->
             let open' = TypeEnv.freeTyVars defTy
+            let own (p: PendingContextInstance) =
+                match TypeResolution.tryFindTypeDef p.Context state with
+                | Some info -> p.ArgTys |> List.truncate (info.Parameters.Length - info.AssociatedTypes.Length)
+                | None -> p.ArgTys
             calls
             |> List.tryFind (fun p ->
                 not p.ChecksOnly
                 && (WellKnownContexts.tryFind p.Context).IsNone
                 && not (WellKnownContexts.isOperatorPending p)
                 && not (InterpolationHoles.isHole p.Callee)
-                && p.ArgTys |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.intersect open' >> Set.isEmpty >> not))
+                && own p |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.intersect open' >> Set.isEmpty >> not))
             |> Option.map (fun p ->
                 let message =
                     $"'{p.Callee}' requires '{p.Context}' of a type nothing in the definition of '{name}' fixes, and a later "
