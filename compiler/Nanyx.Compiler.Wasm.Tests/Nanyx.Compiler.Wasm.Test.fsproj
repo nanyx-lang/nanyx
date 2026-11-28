@@ -316,6 +316,7 @@
     <Compile Include="Features\Types\RunTypeMatchTests.fs" />
     <Compile Include="Features\Types\RunTypeBuildTests.fs" />
     <Compile Include="Features\Types\RunMutuallyRecursiveTypeTests.fs" />
+    <Compile Include="Features\Types\MutuallyRecursiveTypeLoweringTests.fs" />
     <Compile Include="Features\Types\RunTypeCollectionNarrowingTests.fs" />
     <Compile Include="Features\Units\RunUnitLiteralTests.fs" />
     <Compile Include="Features\Units\RunMeasuredArithmeticTests.fs" />
