@@ -844,7 +844,7 @@ A record's fields are written in alphabetical order. A string is written without
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 
-A structure has no `toString` attached, but a pipe to `toString` from one writes it as a hole would: `[1, 2] \toString` is `"[1, 2]"`. The pipe calls the prelude's `__toStringOf`, which requires `ToString`, wherever the value's type attaches no `toString` and nothing in scope is named `toString`. A pipe to `tryFormat` does the same through [`Format`](../stdlib/prelude-format), for a unit quantity.
+A structure has no `toString` attached, but a pipe to `toString` from one writes it as a hole would: `[1, 2] \toString` is `"[1, 2]"`. The pipe calls the prelude's `__toStringOf`, which requires `ToString`, wherever the value's type attaches no `toString` and nothing in scope is named `toString`. A pipe to `tryFormat` does the same through [`Format`](../stdlib/prelude-format), for a unit quantity, and one to `hash` or `compare` through `Hash` or `Ord`: `(1, 2) \compare((1, 3))` is `#less`.
 
 A [private type](./nominal-and-protected-types#private-opaque-types) such as `UserId` can be written only if its module exports a `UserId.toString`. Outside its module the type has no shape to write, so the module chooses how its values are shown, as it chooses everything else that can be done with them.
 
