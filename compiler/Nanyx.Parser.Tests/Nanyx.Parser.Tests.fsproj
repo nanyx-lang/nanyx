@@ -45,6 +45,7 @@
     <Compile Include="Features\Lexer\LexerTests.fs" />
     <Compile Include="Features\Literals\LiteralsTests.fs" />
     <Compile Include="Features\Literals\StringEscapeTests.fs" />
+    <Compile Include="Features\Literals\FormatSpecTests.fs" />
     <Compile Include="Features\Loops\WhileLoopTests.fs" />
     <Compile Include="Features\Loops\LoopBodyTests.fs" />
     <Compile Include="Features\Loops\ForLoopArmTests.fs" />

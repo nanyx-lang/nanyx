@@ -39,6 +39,7 @@
     <Compile Include="Features\Pipes\PipePrecedenceTests.fs" />
     <Compile Include="Features\Pipes\PipeTests.fs" />
     <Compile Include="Features\Strings\StringEscapeTests.fs" />
+    <Compile Include="Features\Strings\FormatSpecTests.fs" />
     <Compile Include="Features\TopLevel\TopLevelTests.fs" />
     <Compile Include="Features\Types\TypeAnnotationTests.fs" />
     <Compile Include="Features\Types\SignatureBreakingTests.fs" />

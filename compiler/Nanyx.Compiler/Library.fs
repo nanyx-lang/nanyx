@@ -686,6 +686,9 @@ module Compiler =
                         desugared
                 let runtimeErrors =
                     Hosts.runtimeErrors isHost origin (entries @ provided @ (script |> Option.map fst |> Option.toList)) (provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
+                // Each spec written in a hole that its value's type rejects (see `FormatSpecChecks`).
+                let formatSpecErrors =
+                    FormatSpecChecks.errors state.TypeDefs (Units.seenOf state >> List.map _.Name) (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst)) desugared
                 // A script whose statements need `HostRuntime` is told so where they need it, one whose statements use
                 // what escaped a scoped call is told of the escape (NYX0233), and one that calls a def that starts a task
                 // it can't keep is told where (see `TaskCaptures`): that its entry point, which has no span, then doesn't
@@ -755,7 +758,7 @@ module Compiler =
                         state.References
                         state.Symbols
                         desugared
-                let moduleDiagnostics = testErrors @ componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleDiagnostics = testErrors @ componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ formatSpecErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // A warning doesn't stop the module running or being imported (see `CheckedModule.Warnings`).
                 let moduleErrors, moduleWarnings = moduleDiagnostics |> List.partition Diagnostics.isError
                 // A message the program writes names a file as a crash's place does: from the package's root, or by its

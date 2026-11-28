@@ -24,7 +24,19 @@ println(format(Instant.epoch, "%A %d %B %Y"))
 -- Thursday 01 January 1970
 ```
 
-A spec a value's type doesn't take stops the program, with a message that names the spec, the type and where in the spec
+A hole in a string can write its value by a spec, written after a `:` (see [Strings](../getting-started/basics#strings)).
+The compiler checks a spec written there against the value's type, so one the type doesn't take is an error as the
+program compiles, [NYX0307](../standard-tools/errors#nyx0307), not as it runs:
+
+```nanyx
+def price = 3.14159
+def count = 1234567
+println("{price:.2f} {count:,} {count:#x} {Instant.epoch:%Y-%m-%d}")
+
+-- 3.14 1,234,567 0x12d687 1970-01-01
+```
+
+Called as a function, a spec a value's type doesn't take stops the program, with a message that names the spec, the type and where in the spec
 it goes wrong. Where the spec is only known as the program runs, `x \tryFormat(spec)` gives `#badFormat` with the same
 reason instead:
 
@@ -114,6 +126,10 @@ its number is written in that unit by the spec, then the unit, so `format(1500ms
 `"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
 `format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
 
+A hole in a string writes its value by a spec written after a `:`, `"{price:.2f}"`, and the
+compiler checks the spec against the value's type, for a type the prelude formats and a unit
+quantity, whose units it knows.
+
 ## `format`
 
 ```nanyx fragment
@@ -123,7 +139,8 @@ def format: [Format(a)] a, string -> string
 `value` written by `spec` (see [`Format`](#format)): `format(1234.5, ",.1f")` is `"1,234.5"`, and
 `format(255, "#x")` is `"0xff"`. A spec the value's type doesn't take stops the program, with a
 message that names the spec, the type and where the spec goes wrong. The type's `tryFormat`, as
-`x \tryFormat(spec)` calls it, gives that as `#badFormat` instead.
+`x \tryFormat(spec)` calls it, gives that as `#badFormat` instead. A hole with a spec, `"{x:.2f}"`,
+writes its value as `format` does.
 
 ## `int.tryFormat`
 

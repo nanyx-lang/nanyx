@@ -645,6 +645,18 @@ module PipedMemberSyntax =
         | "tryFormat" -> Some tryFormat
         | _ -> None
 
+/// `"{x:.2f}"` (see the strings page): a hole with a format spec is a call to the prelude's "__format" with the hole's
+/// value and the spec, without its `:`, as a string literal written where the spec is. `__format` writes the value by
+/// the spec as `format` does, and no def of the program's own hides it.
+module FormatSyntax =
+    let builtIn = "__format"
+
+    /// A hole's value, its spec, and where the spec is written.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ value; { Kind = LiteralExpr (StringLit spec); Span = span } ]) when name = builtIn -> Some (value, spec, span)
+        | _ -> None
+
 /// `[k => v, ...]` (see the collections page): a call to the prelude's "__map" with a list of the entries, each a
 /// tuple of its key and its value, in the order they are written.
 module MapSyntax =

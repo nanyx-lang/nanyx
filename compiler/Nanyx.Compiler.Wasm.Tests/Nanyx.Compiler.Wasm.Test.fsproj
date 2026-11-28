@@ -20,6 +20,8 @@
   <ItemGroup>
     <!-- Timing, shared by the test projects that time anything (see TestTiming.fs). -->
     <Compile Include="..\TestTiming.fs" Link="TestTiming.fs" />
+    <!-- The format specs the compiler's FormatSpecs and the prelude are both tested against. -->
+    <Compile Include="..\FormatSpecTable.fs" Link="FormatSpecTable.fs" />
     <Compile Include="TestHelpers.fs" />
     <Compile Include="Features\Core\FunctionAndLocalsTests.fs" />
     <Compile Include="Features\Core\AllocatorTests.fs" />
